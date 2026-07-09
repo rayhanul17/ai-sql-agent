@@ -1,0 +1,60 @@
+# ============================================================
+#  AI SQL Agent — DEVELOPMENT stack.
+#  Runs PostgreSQL + Ollama (with models auto-pulled).
+#  The APP is NOT here — during development you run it natively
+#  with `dotnet run --project src/SqlAgent.Web` so you can iterate fast.
+#
+#  For an all-in-one stack that also containerises the app (final
+#  test / production), use docker-compose.full.yml.
+# ============================================================
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: agent-postgres
+    environment:
+      POSTGRES_DB: agentdb
+      POSTGRES_USER: agent_owner
+      POSTGRES_PASSWORD: owner_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      # *.sql here run in filename order on first initialisation only.
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+      - agent_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent_owner -d agentdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: agent-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - agent_ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # One-shot: pulls the models into the ollama volume, then exits.
+  # 14b is optional/heavy — pull it manually if your machine can run it.
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: agent-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: >
+      sh -c "ollama pull qwen2.5-coder:3b"
+    restart: "no"
+
+volumes:
+  agent_pgdata:
+  agent_ollama:

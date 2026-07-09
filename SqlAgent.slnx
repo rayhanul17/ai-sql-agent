@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SqlAgent.Application/SqlAgent.Application.csproj" />
+    <Project Path="src/SqlAgent.Domain/SqlAgent.Domain.csproj" />
+    <Project Path="src/SqlAgent.Infrastructure/SqlAgent.Infrastructure.csproj" />
+    <Project Path="src/SqlAgent.Web/SqlAgent.Web.csproj" />
+  </Folder>
+</Solution>

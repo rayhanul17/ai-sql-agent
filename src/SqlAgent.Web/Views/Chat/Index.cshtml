@@ -1,0 +1,88 @@
+@{
+    ViewData["Title"] = "Chat";
+}
+
+<div class="app-shell">
+    <!-- Sidebar: data source + model -->
+    <aside class="sidebar">
+        <div class="brand">
+            <i class="bi bi-robot"></i>
+            <div>
+                <div class="brand-title">AI SQL Agent</div>
+                <div class="brand-sub">Chat with your database</div>
+            </div>
+        </div>
+
+        <div class="side-section">
+            <label class="side-label"><i class="bi bi-cpu"></i> Model</label>
+            <select id="modelSelect" class="form-select form-select-sm"></select>
+            <div id="modelStatus" class="model-status"></div>
+        </div>
+
+        <div class="side-section">
+            <label class="side-label"><i class="bi bi-database"></i> Data source</label>
+            <select id="dialectSelect" class="form-select form-select-sm mb-2">
+                <option value="">Demo database (default)</option>
+                <option value="0">PostgreSQL (custom)</option>
+                <option value="1">MySQL (custom)</option>
+                <option value="2">SQL Server (custom)</option>
+            </select>
+            <textarea id="connStr" class="form-control form-control-sm"
+                      rows="3" placeholder="Connection string (leave empty for demo DB)"
+                      disabled></textarea>
+            <div class="side-hint">
+                <i class="bi bi-shield-lock"></i>
+                Queries run read-only. Use a read-only DB user when possible.
+            </div>
+        </div>
+
+        <div class="side-footer">
+            <button id="clearBtn" class="btn btn-sm btn-outline-secondary w-100">
+                <i class="bi bi-trash3"></i> Clear chat
+            </button>
+        </div>
+    </aside>
+
+    <!-- Main chat -->
+    <main class="chat-main">
+        <div id="messages" class="messages">
+            <div class="empty-state">
+                <i class="bi bi-chat-square-dots"></i>
+                <h5>Ask anything about your data</h5>
+                <p>e.g. “Which students were absent this month?” or “Top 5 highest fees.”</p>
+            </div>
+        </div>
+
+        <form id="askForm" class="composer">
+            <input id="questionInput" class="form-control" autocomplete="off"
+                   placeholder="Ask a question in plain English…" />
+            <button type="submit" id="sendBtn" class="btn btn-primary">
+                <i class="bi bi-send"></i>
+            </button>
+        </form>
+    </main>
+</div>
+
+<!-- Show Query modal -->
+<div class="modal fade" id="sqlModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-code-square"></i> Generated SQL</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <pre id="sqlModalBody" class="sql-block"></pre>
+            </div>
+            <div class="modal-footer">
+                <button id="copySqlBtn" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-clipboard"></i> Copy
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="~/js/chat.js" asp-append-version="true"></script>
+}

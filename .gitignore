@@ -1,0 +1,40 @@
+# ---- .NET build output ----
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+*.user
+*.suo
+*.userosscache
+*.dll
+*.pdb
+
+# ---- Rider / VS / VS Code ----
+.vs/
+.idea/
+*.sln.iml
+.vscode/
+
+# ---- .NET tooling ----
+project.lock.json
+artifacts/
+*.nupkg
+*.snupkg
+
+# ---- Logs ----
+logs/
+*.log
+
+# ---- Local secrets / env ----
+appsettings.*.local.json
+*.env
+.env
+
+# ---- OS ----
+.DS_Store
+Thumbs.db
+
+# ---- Docker volume data (never commit) ----
+docker/data/
