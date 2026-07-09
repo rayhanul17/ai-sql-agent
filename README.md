@@ -103,6 +103,9 @@ dotnet run --project src/SqlAgent.Web
 teachers, attendance, fees, leaves) and a read-only role `agent_readonly`.
 Only pulled models appear (enabled) in the UI dropdown; 3B is the default.
 
+> PostgreSQL is published on host port **5433** (to avoid a local 5432
+> already in use). The app's default connection string points at 5433.
+
 **B) All-in-one (final test / production)** — everything, including the app,
 in containers:
 
