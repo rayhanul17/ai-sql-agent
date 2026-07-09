@@ -37,7 +37,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # Pulls the default model into the ollama volume, then exits.
+  # Pulls BOTH model tiers into the ollama volume, then exits.
   ollama-init:
     image: ollama/ollama:latest
     container_name: agent-ollama-init
@@ -47,7 +47,7 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: >
-      sh -c "ollama pull qwen2.5-coder:3b"
+      sh -c "ollama pull qwen2.5-coder:3b && ollama pull qwen2.5-coder:7b"
     restart: "no"
 
   app:

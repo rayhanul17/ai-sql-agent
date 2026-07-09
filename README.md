@@ -91,11 +91,9 @@ docker-compose.yml          PostgreSQL (seeded) — Ollama runs natively
 **A) Development** — infra in Docker, app runs natively (fast to iterate):
 
 ```bash
-# Starts PostgreSQL (seeded) + Ollama, and auto-pulls qwen2.5-coder:3b.
+# Starts PostgreSQL (seeded) + Ollama, and auto-pulls BOTH models
+# (qwen2.5-coder:3b and :7b). First run downloads ~6 GB — give it a moment.
 docker compose up -d
-
-# (optional) pull the bigger model if your machine can run it (~6 GB RAM):
-docker exec agent-ollama ollama pull qwen2.5-coder:7b
 
 # Run the web app:
 dotnet run --project src/SqlAgent.Web
