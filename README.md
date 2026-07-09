@@ -94,8 +94,8 @@ docker-compose.yml          PostgreSQL (seeded) — Ollama runs natively
 # Starts PostgreSQL (seeded) + Ollama, and auto-pulls qwen2.5-coder:3b.
 docker compose up -d
 
-# (optional) pull the bigger model if your machine can run it (~10 GB RAM):
-docker exec agent-ollama ollama pull qwen2.5-coder:14b
+# (optional) pull the bigger model if your machine can run it (~6 GB RAM):
+docker exec agent-ollama ollama pull qwen2.5-coder:7b
 
 # Run the web app:
 dotnet run --project src/SqlAgent.Web
@@ -132,16 +132,17 @@ One family (**Qwen 2.5 Coder**) keeps prompting consistent while scaling by size
 | Tier | Model | Approx RAM | For |
 |------|-------|-----------|-----|
 | Minimum | `qwen2.5-coder:3b` | ~3 GB | modest machines (default) |
-| Almost Best | `qwen2.5-coder:14b` | ~10 GB | strongest SQL, big RAM |
+| Better | `qwen2.5-coder:7b` | ~6 GB | better SQL, 16 GB RAM |
 
 Switching models in the UI triggers a warm-up; the first request after a
 cold switch loads the model into RAM (a few seconds for larger models), then
-subsequent queries are fast. A 7B tier can be added later by one config line.
+subsequent queries are fast. A larger tier (e.g. 14B) or a cloud LLM can be
+added later by one config line.
 
 ---
 
 ## Future improvements
-- Add a 7B tier and optional cloud LLM (OpenAI/Claude) via the same `IAiProvider`.
+- Add a larger tier (14B) and optional cloud LLM (OpenAI/Claude) via the same `IAiProvider`.
 - Query-result caching (Redis) for repeated questions.
 - Role-based data access (row-level restrictions per user).
 - Few-shot examples in the prompt to improve SQL accuracy.

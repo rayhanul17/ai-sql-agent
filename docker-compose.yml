@@ -41,8 +41,8 @@ services:
       timeout: 5s
       retries: 5
 
-  # One-shot: pulls the models into the ollama volume, then exits.
-  # 14b is optional/heavy — pull it manually if your machine can run it.
+  # One-shot: pulls the default model into the ollama volume, then exits.
+  # 7b (Better tier) is optional — pull it manually if your machine can run it.
   ollama-init:
     image: ollama/ollama:latest
     container_name: agent-ollama-init
