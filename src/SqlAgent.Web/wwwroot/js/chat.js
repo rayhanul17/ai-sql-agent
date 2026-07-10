@@ -164,13 +164,23 @@ function actionBtn(icon, label, cls) {
     return b;
 }
 
-// A result is chartable when it has one text/label column and one numeric column.
+// A result is chartable when it has at least one label (text) column and at
+// least one numeric column, with a sensible number of rows. Picks the first
+// numeric column as the value and the first non-numeric column as the label.
 function detectChartable(result) {
-    if (result.columns.length !== 2 || result.rowCount === 0 || result.rowCount > 50) return null;
-    const numericCol = result.rows.every(r => isNumeric(r[1])) ? 1 : (result.rows.every(r => isNumeric(r[0])) ? 0 : -1);
-    if (numericCol === -1) return null;
-    const labelCol = numericCol === 1 ? 0 : 1;
-    return { labelCol, valueCol: numericCol };
+    const n = result.columns.length;
+    if (n < 2 || result.rowCount === 0 || result.rowCount > 50) return null;
+
+    const colIsNumeric = i => result.rows.every(r => isNumeric(r[i]));
+    let valueCol = -1, labelCol = -1;
+    for (let i = 0; i < n; i++) {
+        if (valueCol === -1 && colIsNumeric(i)) valueCol = i;
+        else if (labelCol === -1 && !colIsNumeric(i)) labelCol = i;
+    }
+    // Need one of each; a label that is also the id column is fine.
+    if (valueCol === -1) return null;
+    if (labelCol === -1) labelCol = valueCol === 0 ? 1 : 0;
+    return { labelCol, valueCol };
 }
 
 function drawChart(host, result, cfg) {

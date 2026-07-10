@@ -69,8 +69,11 @@ public sealed class PromptBuilder
             It returned {result.RowCount} row(s). Data (preview):
             {preview}
 
-            Write a concise, friendly answer to the user's question based ONLY on this data.
-            Do not mention SQL. If the result is empty, say no matching records were found.
+            The full data is ALREADY shown to the user in a table, so do NOT
+            repeat the rows one by one. Write only a SHORT summary (1-3 sentences):
+            the overall count and any notable pattern or highlight (e.g. totals,
+            groupings, min/max). Be concise. Do not mention SQL. Do not end with a
+            question. If the result is empty, say no matching records were found.
             """;
     }
 
