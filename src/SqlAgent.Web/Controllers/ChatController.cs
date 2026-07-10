@@ -59,7 +59,10 @@ public sealed class ChatController : Controller
             Question = dto.Question,
             ConnectionString = dto.ConnectionString,
             Dialect = dto.Dialect,
-            Model = dto.Model
+            Model = dto.Model,
+            History = dto.History
+                .Select(t => new ConversationTurn { Question = t.Question, Sql = t.Sql })
+                .ToList()
         };
 
         await foreach (var chunk in _agent.AskStreamAsync(request, ct))

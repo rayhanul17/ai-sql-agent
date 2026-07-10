@@ -14,6 +14,8 @@ namespace SqlAgent.Application.Services;
 /// </summary>
 public sealed class QueryAgentService : IQueryAgentService
 {
+    private const int MaxRetries = 1; // one self-correction attempt on DB error
+
     private readonly ISchemaIntrospector _introspector;
     private readonly IAiProvider _ai;
     private readonly ISqlSafetyValidator _validator;
@@ -66,7 +68,7 @@ public sealed class QueryAgentService : IQueryAgentService
             var dialect = _dialects.Get(dialectId);
             var schema = await _introspector.IntrospectAsync(conn, dialectId, ct);
 
-            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, _agent.MaxRows);
+            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, _agent.MaxRows, request.History);
             var rawSql = await _ai.GenerateSqlAsync(sqlPrompt, model, ct);
             _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
 
@@ -115,34 +117,54 @@ public sealed class QueryAgentService : IQueryAgentService
         stepError = await TryStepAsync(async () => schema = await _introspector.IntrospectAsync(conn, dialectId, ct));
         if (stepError is not null) { yield return Err($"Could not connect / read schema: {stepError}"); yield break; }
 
-        // Generate SQL.
-        yield return Status("Generating SQL...");
-        string? rawSql = null;
-        stepError = await TryStepAsync(async () =>
-        {
-            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema!, dialect!, _agent.MaxRows);
-            rawSql = await _ai.GenerateSqlAsync(sqlPrompt, model, ct);
-            _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
-        });
-        if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
-
-        // Validate (safety layer).
-        var validation = _validator.Validate(rawSql!, dialect!, _agent.MaxRows);
-        if (!validation.IsValid) { yield return Err($"Rejected unsafe SQL: {validation.Reason}"); yield break; }
-        var safeSql = validation.SafeSql!;
-        yield return new StreamChunk { Type = "sql", Content = safeSql };
-
-        // Execute read-only.
-        yield return Status("Running query (read-only)...");
+        // Generate -> validate -> execute, retrying once if the DB rejects the
+        // SQL (e.g. a hallucinated column). The DB error is fed back to the model.
+        string? safeSql = null;
         QueryResult? result = null;
-        stepError = await TryStepAsync(async () =>
-            result = await _executor.ExecuteReadOnlyAsync(conn, dialectId, safeSql, _agent.QueryTimeoutSeconds, ct));
-        if (stepError is not null) { yield return Err($"Query failed: {stepError}"); yield break; }
+        string? lastError = null;
+        string? prevSql = null;
+
+        for (var attempt = 0; attempt <= MaxRetries; attempt++)
+        {
+            yield return Status(attempt == 0 ? "Generating SQL..." : "Fixing the query and retrying...");
+
+            string? rawSql = null;
+            var isRetry = attempt > 0;
+            stepError = await TryStepAsync(async () =>
+            {
+                var prompt = isRetry
+                    ? _prompts.BuildRetryPrompt(request.Question, schema!, dialect!, _agent.MaxRows, prevSql!, lastError!, request.History)
+                    : _prompts.BuildSqlPrompt(request.Question, schema!, dialect!, _agent.MaxRows, request.History);
+                rawSql = await _ai.GenerateSqlAsync(prompt, model, ct);
+                _log.LogInformation("Model {Model} generated SQL (attempt {Attempt}): {Sql}", model, attempt + 1, rawSql);
+            });
+            if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
+
+            var validation = _validator.Validate(rawSql!, dialect!, _agent.MaxRows);
+            if (!validation.IsValid) { yield return Err($"Rejected unsafe SQL: {validation.Reason}"); yield break; }
+
+            safeSql = validation.SafeSql!;
+            yield return new StreamChunk { Type = "sql", Content = safeSql };
+
+            yield return Status("Running query (read-only)...");
+            QueryResult? attemptResult = null;
+            var execError = await TryStepAsync(async () =>
+                attemptResult = await _executor.ExecuteReadOnlyAsync(conn, dialectId, safeSql, _agent.QueryTimeoutSeconds, ct));
+
+            if (execError is null) { result = attemptResult; break; }
+
+            // Failed. Retry if we have attempts left, else surface the error.
+            _log.LogWarning("Query attempt {Attempt} failed: {Error}", attempt + 1, execError);
+            lastError = execError;
+            prevSql = safeSql;
+            if (attempt == MaxRetries) { yield return Err($"Query failed: {execError}"); yield break; }
+        }
+
         yield return new StreamChunk { Type = "rows", Data = result };
 
         // Stream explanation.
         yield return Status("Explaining result...");
-        var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql, result!);
+        var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!);
         await foreach (var tok in _ai.StreamExplanationAsync(explainPrompt, model, ct))
             yield return new StreamChunk { Type = "token", Content = tok };
 

@@ -1,5 +1,12 @@
 namespace SqlAgent.Domain.Models;
 
+/// <summary>One earlier exchange, sent back by the client for context.</summary>
+public sealed class ConversationTurn
+{
+    public required string Question { get; init; }
+    public string? Sql { get; init; }
+}
+
 /// <summary>A user's natural-language question plus the data source + model to use.</summary>
 public sealed class AskRequest
 {
@@ -13,6 +20,9 @@ public sealed class AskRequest
 
     /// <summary>Optional model override (must be an available model). Null = configured default.</summary>
     public string? Model { get; init; }
+
+    /// <summary>Recent prior turns (oldest first) so follow-up questions resolve.</summary>
+    public List<ConversationTurn> History { get; init; } = [];
 }
 
 /// <summary>The generated SQL plus its execution result and an AI explanation.</summary>

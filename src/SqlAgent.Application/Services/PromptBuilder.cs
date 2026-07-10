@@ -34,26 +34,69 @@ public sealed class PromptBuilder
         return sb.ToString();
     }
 
-    public string BuildSqlPrompt(string question, DatabaseSchema schema, ISqlDialect dialect, int maxRows)
+    public string BuildSqlPrompt(
+        string question, DatabaseSchema schema, ISqlDialect dialect, int maxRows,
+        IReadOnlyList<ConversationTurn>? history = null)
     {
         var schemaText = RenderSchema(schema);
+        var historyText = RenderHistory(history);
         return $"""
             You are a senior data analyst that writes {dialect.DisplayName} SQL.
 
             Database schema (only these tables/columns exist):
             {schemaText}
-
+            {historyText}
             Rules — follow ALL strictly:
             - Generate exactly ONE read-only SELECT statement.
             - NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT or any write/DDL.
             - NEVER invent tables or columns that are not in the schema above.
             - {dialect.PromptSyntaxHint}
+            - If the question is a follow-up (e.g. "in Bangla", "as a chart", "only males"),
+              adjust the PREVIOUS query's intent rather than treating the words as data values.
             - Always limit the result to at most {maxRows} rows.
             - Return ONLY the raw SQL. No explanation, no markdown fences, no comments.
 
             Question: {question}
 
             SQL:
+            """;
+    }
+
+    private static string RenderHistory(IReadOnlyList<ConversationTurn>? history)
+    {
+        if (history is null || history.Count == 0) return string.Empty;
+        var sb = new StringBuilder();
+        sb.AppendLine();
+        sb.AppendLine("Recent conversation (for context on follow-ups):");
+        foreach (var turn in history)
+        {
+            sb.AppendLine($"- User asked: {turn.Question}");
+            if (!string.IsNullOrWhiteSpace(turn.Sql))
+                sb.AppendLine($"  SQL used: {turn.Sql}");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Rebuild the SQL prompt after a failed execution, telling the model
+    /// exactly what went wrong so it can self-correct (e.g. a wrong column).
+    /// </summary>
+    public string BuildRetryPrompt(
+        string question, DatabaseSchema schema, ISqlDialect dialect, int maxRows,
+        string failedSql, string dbError, IReadOnlyList<ConversationTurn>? history = null)
+    {
+        var basePrompt = BuildSqlPrompt(question, schema, dialect, maxRows, history);
+        return $"""
+            {basePrompt}
+
+            Your previous attempt FAILED. Do not repeat the same mistake.
+            Previous SQL:
+            {failedSql}
+            Database error:
+            {dbError}
+
+            Re-read the schema above and use ONLY column/table names that appear
+            there. Return the corrected SQL only.
             """;
     }
 

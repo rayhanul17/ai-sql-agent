@@ -19,6 +19,10 @@ const els = {
 const sqlModal = new bootstrap.Modal(document.getElementById('sqlModal'));
 let chartCounter = 0;
 
+// Recent conversation turns (question + generated SQL) sent for follow-up context.
+const history = [];
+const MAX_HISTORY = 4;
+
 // ---------- Model dropdown + warm-up loader ----------
 async function loadModels() {
     try {
@@ -242,6 +246,7 @@ async function ask(question) {
         model: els.modelSelect.value || null,
         connectionString: els.dialectSelect.value === '' ? null : (els.connStr.value || null),
         dialect: els.dialectSelect.value === '' ? null : Number(els.dialectSelect.value),
+        history: history.slice(-MAX_HISTORY),
     };
 
     els.sendBtn.disabled = true;
@@ -285,6 +290,8 @@ async function ask(question) {
                 } else if (chunk.type === 'done') {
                     ui.status.innerHTML = '';
                     ui.answer.classList.remove('typing');
+                    // Remember this turn for follow-up questions.
+                    if (currentSql) history.push({ question, sql: currentSql });
                 } else if (chunk.type === 'error') {
                     ui.status.innerHTML = '';
                     ui.answer.classList.remove('typing');
@@ -311,6 +318,7 @@ els.form.addEventListener('submit', e => {
 });
 
 els.clearBtn.addEventListener('click', () => {
+    history.length = 0;
     els.messages.innerHTML = `<div class="empty-state">
         <i class="bi bi-chat-square-dots"></i>
         <h5>Ask anything about your data</h5>
