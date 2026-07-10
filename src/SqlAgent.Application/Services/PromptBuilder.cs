@@ -100,12 +100,15 @@ public sealed class PromptBuilder
             """;
     }
 
-    public string BuildExplanationPrompt(string question, string sql, QueryResult result)
+    public string BuildExplanationPrompt(
+        string question, string sql, QueryResult result,
+        IReadOnlyList<ConversationTurn>? history = null)
     {
         var preview = RenderResultPreview(result);
+        var historyText = RenderHistory(history);
         return $"""
             The user asked: "{question}"
-
+            {historyText}
             This SQL was run:
             {sql}
 
@@ -117,6 +120,10 @@ public sealed class PromptBuilder
             the overall count and any notable pattern or highlight (e.g. totals,
             groupings, min/max). Be concise. Do not mention SQL. Do not end with a
             question. If the result is empty, say no matching records were found.
+
+            IMPORTANT: Reply in the SAME language the user used in their question
+            (or the language they most recently asked you to use — e.g. if they
+            said to answer in Bangla, answer in Bangla). Match their language.
             """;
     }
 

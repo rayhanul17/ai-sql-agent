@@ -79,7 +79,7 @@ public sealed class QueryAgentService : IQueryAgentService
             var result = await _executor.ExecuteReadOnlyAsync(
                 conn, dialectId, validation.SafeSql!, _agent.QueryTimeoutSeconds, ct);
 
-            var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result);
+            var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result, request.History);
             var explanation = string.Empty;
             await foreach (var tok in _ai.StreamExplanationAsync(explainPrompt, model, ct))
                 explanation += tok;
@@ -164,7 +164,7 @@ public sealed class QueryAgentService : IQueryAgentService
 
         // Stream explanation.
         yield return Status("Explaining result...");
-        var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!);
+        var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!, request.History);
         await foreach (var tok in _ai.StreamExplanationAsync(explainPrompt, model, ct))
             yield return new StreamChunk { Type = "token", Content = tok };
 
