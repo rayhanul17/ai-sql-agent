@@ -159,7 +159,7 @@ els.settingsSave.addEventListener('click', async () => {
 
         // 2) Warm up the model (loads it into RAM; surfaces load errors).
         if (draft.model) {
-            showMask(`Loading model ${draft.model}…`);
+            showMask(`Loading model ${draft.model}… (larger models can take a few minutes)`);
             const warm = await fetch('/Chat/Warmup', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(draft.model),

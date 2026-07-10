@@ -31,7 +31,10 @@ public static class DependencyInjection
         });
 
         // Model manager uses a typed HttpClient to Ollama's management API.
-        services.AddHttpClient<IModelManager, OllamaModelManager>();
+        // A long timeout is required: warming up a large model is a COLD load
+        // into RAM and can take minutes on CPU-only machines.
+        services.AddHttpClient<IModelManager, OllamaModelManager>(c =>
+            c.Timeout = TimeSpan.FromMinutes(10));
 
         return services;
     }
