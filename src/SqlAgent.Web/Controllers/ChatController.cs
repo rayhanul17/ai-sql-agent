@@ -12,15 +12,19 @@ public sealed class ChatController : Controller
 {
     private readonly IQueryAgentService _agent;
     private readonly IModelManager _models;
+    private readonly ISqlExecutor _executor;
     private readonly ILogger<ChatController> _log;
 
     private static readonly JsonSerializerOptions JsonOpts =
         new(JsonSerializerDefaults.Web);
 
-    public ChatController(IQueryAgentService agent, IModelManager models, ILogger<ChatController> log)
+    public ChatController(
+        IQueryAgentService agent, IModelManager models,
+        ISqlExecutor executor, ILogger<ChatController> log)
     {
         _agent = agent;
         _models = models;
+        _executor = executor;
         _log = log;
     }
 
@@ -41,6 +45,26 @@ public sealed class ChatController : Controller
     {
         var result = await _models.WarmUpAsync(model, ct);
         return Json(result, JsonOpts);
+    }
+
+    /// <summary>Validate a runtime connection string before it is applied (Save flow).</summary>
+    [HttpPost]
+    public async Task<IActionResult> TestConnection([FromBody] TestConnectionDto dto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.ConnectionString) || dto.Dialect is null)
+            return Json(new { ok = false, error = "Connection string and database type are required." }, JsonOpts);
+
+        try
+        {
+            var ok = await _executor.TestConnectionAsync(dto.ConnectionString, dto.Dialect.Value, ct);
+            return ok
+                ? Json(new { ok = true }, JsonOpts)
+                : Json(new { ok = false, error = "Could not connect with the given connection string." }, JsonOpts);
+        }
+        catch (Exception ex)
+        {
+            return Json(new { ok = false, error = ex.Message }, JsonOpts);
+        }
     }
 
     /// <summary>

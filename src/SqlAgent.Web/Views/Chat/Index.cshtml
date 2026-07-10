@@ -3,8 +3,8 @@
 }
 
 <div class="app-shell">
-    <!-- Sidebar: data source + model -->
-    <aside class="sidebar">
+    <!-- Top bar -->
+    <header class="topbar">
         <div class="brand">
             <i class="bi bi-robot"></i>
             <div>
@@ -12,11 +12,63 @@
                 <div class="brand-sub">Chat with your database</div>
             </div>
         </div>
+        <div class="topbar-actions">
+            <span id="activeModelBadge" class="active-badge" title="Active model"></span>
+            <span id="activeSourceBadge" class="active-badge" title="Active data source"></span>
+            <button id="themeToggle" class="icon-btn" title="Toggle theme">
+                <i class="bi bi-moon-stars"></i>
+            </button>
+            <button id="settingsToggle" class="icon-btn" title="Settings">
+                <i class="bi bi-gear"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main chat -->
+    <main class="chat-main">
+        <div id="messages" class="messages">
+            <div class="empty-state">
+                <i class="bi bi-chat-square-dots"></i>
+                <h5>Ask anything about your data</h5>
+                <p>e.g. “How many students are in each class?” or “Top 5 highest fees.”</p>
+            </div>
+        </div>
+
+        <form id="askForm" class="composer">
+            <button type="button" id="clearBtn" class="icon-btn" title="Clear chat">
+                <i class="bi bi-trash3"></i>
+            </button>
+            <input id="questionInput" class="form-control" autocomplete="off"
+                   placeholder="Ask a question in plain English…" />
+            <button type="submit" id="sendBtn" class="btn btn-primary">
+                <i class="bi bi-send"></i>
+            </button>
+        </form>
+    </main>
+</div>
+
+<!-- Settings panel (slide-in) -->
+<div id="settingsBackdrop" class="settings-backdrop hidden"></div>
+<aside id="settingsPanel" class="settings-panel hidden">
+    <div class="settings-header">
+        <h5><i class="bi bi-gear"></i> Settings</h5>
+        <button id="settingsClose" class="icon-btn"><i class="bi bi-x-lg"></i></button>
+    </div>
+
+    <div class="settings-body">
+        <div class="side-section">
+            <label class="side-label"><i class="bi bi-palette"></i> Theme</label>
+            <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="theme" id="themeDark" value="dark">
+                <label class="btn btn-sm btn-outline-secondary" for="themeDark"><i class="bi bi-moon"></i> Dark</label>
+                <input type="radio" class="btn-check" name="theme" id="themeLight" value="light">
+                <label class="btn btn-sm btn-outline-secondary" for="themeLight"><i class="bi bi-sun"></i> Light</label>
+            </div>
+        </div>
 
         <div class="side-section">
             <label class="side-label"><i class="bi bi-cpu"></i> Model</label>
             <select id="modelSelect" class="form-select form-select-sm"></select>
-            <div id="modelStatus" class="model-status"></div>
         </div>
 
         <div class="side-section">
@@ -36,31 +88,26 @@
             </div>
         </div>
 
-        <div class="side-footer">
-            <button id="clearBtn" class="btn btn-sm btn-outline-secondary w-100">
-                <i class="bi bi-trash3"></i> Clear chat
-            </button>
-        </div>
-    </aside>
+        <div id="settingsError" class="settings-error hidden"></div>
+    </div>
 
-    <!-- Main chat -->
-    <main class="chat-main">
-        <div id="messages" class="messages">
-            <div class="empty-state">
-                <i class="bi bi-chat-square-dots"></i>
-                <h5>Ask anything about your data</h5>
-                <p>e.g. “Which students were absent this month?” or “Top 5 highest fees.”</p>
-            </div>
-        </div>
+    <div class="settings-footer">
+        <button id="settingsReset" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-arrow-counterclockwise"></i> Reset
+        </button>
+        <button id="settingsCancel" class="btn btn-sm btn-outline-secondary">Cancel</button>
+        <button id="settingsSave" class="btn btn-sm btn-primary">
+            <i class="bi bi-check2"></i> Save
+        </button>
+    </div>
+</aside>
 
-        <form id="askForm" class="composer">
-            <input id="questionInput" class="form-control" autocomplete="off"
-                   placeholder="Ask a question in plain English…" />
-            <button type="submit" id="sendBtn" class="btn btn-primary">
-                <i class="bi bi-send"></i>
-            </button>
-        </form>
-    </main>
+<!-- Full-page loader / mask (shown while applying settings) -->
+<div id="pageMask" class="page-mask hidden">
+    <div class="mask-box">
+        <div class="spinner-border text-light"></div>
+        <div id="maskText" class="mask-text">Applying…</div>
+    </div>
 </div>
 
 <!-- Show Query modal -->

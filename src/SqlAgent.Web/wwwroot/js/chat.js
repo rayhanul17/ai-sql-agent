@@ -1,29 +1,64 @@
-// ---- AI SQL Agent chat frontend ----
-// Consumes the SSE stream from /Chat/Ask and renders status, SQL (modal),
-// a result table, an optional chart, and an Excel download.
+// ============================================================
+//  AI SQL Agent — chat frontend
+//  Handles SSE streaming, result table, Show-Query modal, Excel,
+//  bar/line/pie charts, dark/light theme, and a settings panel with
+//  DEFERRED apply (changes take effect only on Save, with validation
+//  and a full-page mask).
+// ============================================================
 
+const $ = id => document.getElementById(id);
 const els = {
-    messages: document.getElementById('messages'),
-    form: document.getElementById('askForm'),
-    input: document.getElementById('questionInput'),
-    sendBtn: document.getElementById('sendBtn'),
-    modelSelect: document.getElementById('modelSelect'),
-    modelStatus: document.getElementById('modelStatus'),
-    dialectSelect: document.getElementById('dialectSelect'),
-    connStr: document.getElementById('connStr'),
-    clearBtn: document.getElementById('clearBtn'),
-    sqlModalBody: document.getElementById('sqlModalBody'),
-    copySqlBtn: document.getElementById('copySqlBtn'),
+    messages: $('messages'), form: $('askForm'), input: $('questionInput'),
+    sendBtn: $('sendBtn'), clearBtn: $('clearBtn'),
+    modelSelect: $('modelSelect'), dialectSelect: $('dialectSelect'), connStr: $('connStr'),
+    sqlModalBody: $('sqlModalBody'), copySqlBtn: $('copySqlBtn'),
+    settingsToggle: $('settingsToggle'), settingsPanel: $('settingsPanel'),
+    settingsBackdrop: $('settingsBackdrop'), settingsClose: $('settingsClose'),
+    settingsSave: $('settingsSave'), settingsCancel: $('settingsCancel'),
+    settingsReset: $('settingsReset'), settingsError: $('settingsError'),
+    themeToggle: $('themeToggle'), pageMask: $('pageMask'), maskText: $('maskText'),
+    activeModelBadge: $('activeModelBadge'), activeSourceBadge: $('activeSourceBadge'),
 };
 
-const sqlModal = new bootstrap.Modal(document.getElementById('sqlModal'));
+const sqlModal = new bootstrap.Modal($('sqlModal'));
 let chartCounter = 0;
 
-// Recent conversation turns (question + generated SQL) sent for follow-up context.
 const history = [];
 const MAX_HISTORY = 4;
 
-// ---------- Model dropdown + warm-up loader ----------
+// ---- Applied (active) settings vs. draft (in the panel, unsaved) ----
+const DEFAULTS = { theme: 'dark', model: '', dialect: '', connStr: '' };
+let applied = loadSettings();
+
+function loadSettings() {
+    try {
+        const s = JSON.parse(localStorage.getItem('sqlagent.settings') || '{}');
+        return { ...DEFAULTS, ...s };
+    } catch { return { ...DEFAULTS }; }
+}
+function saveSettings() {
+    localStorage.setItem('sqlagent.settings', JSON.stringify(applied));
+}
+
+// ============================================================
+//  Theme
+// ============================================================
+function applyTheme(theme) {
+    document.documentElement.setAttribute('data-bs-theme', theme);
+    els.themeToggle.innerHTML = theme === 'dark'
+        ? '<i class="bi bi-moon-stars"></i>' : '<i class="bi bi-sun"></i>';
+}
+els.themeToggle.addEventListener('click', () => {
+    // Quick toggle applies immediately (theme is cosmetic, no validation needed).
+    applied.theme = applied.theme === 'dark' ? 'light' : 'dark';
+    applyTheme(applied.theme);
+    saveSettings();
+    syncDraftToPanel();
+});
+
+// ============================================================
+//  Model dropdown
+// ============================================================
 async function loadModels() {
     try {
         const res = await fetch('/Chat/Models');
@@ -36,48 +71,131 @@ async function loadModels() {
             opt.disabled = !m.isAvailable;
             els.modelSelect.appendChild(opt);
         });
-        const firstAvailable = models.find(m => m.isAvailable);
-        if (firstAvailable) els.modelSelect.value = firstAvailable.id;
+        // Prefer the applied model, else the first available.
+        const wanted = applied.model && models.some(m => m.id === applied.model && m.isAvailable)
+            ? applied.model : (models.find(m => m.isAvailable)?.id || '');
+        applied.model = wanted;
+        els.modelSelect.value = wanted;
     } catch {
-        els.modelStatus.innerHTML = '<span class="loading">Ollama not reachable</span>';
+        els.modelSelect.innerHTML = '<option>Ollama not reachable</option>';
     }
 }
 
-// Warm the selected model into RAM; show an indeterminate loader meanwhile.
-async function warmUp(model) {
-    els.modelStatus.innerHTML = `<span class="loading"><span class="spinner-border spinner-border-sm"></span> Loading ${model}…</span>`;
-    try {
-        const res = await fetch('/Chat/Warmup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(model),
-        });
-        const r = await res.json();
-        if (r.success) {
-            const s = r.loadDurationMs > 50 ? ` (loaded in ${(r.loadDurationMs / 1000).toFixed(1)}s)` : '';
-            els.modelStatus.innerHTML = `<span class="ready"><i class="bi bi-check-circle"></i> Ready${s}</span>`;
-        } else {
-            els.modelStatus.innerHTML = `<span class="loading">Load failed</span>`;
-        }
-    } catch {
-        els.modelStatus.innerHTML = `<span class="loading">Load failed</span>`;
-    }
+// ============================================================
+//  Settings panel — deferred apply
+// ============================================================
+function openSettings() {
+    syncDraftToPanel();
+    els.settingsError.classList.add('hidden');
+    els.settingsPanel.classList.remove('hidden');
+    els.settingsBackdrop.classList.remove('hidden');
+}
+function closeSettings() {
+    els.settingsPanel.classList.add('hidden');
+    els.settingsBackdrop.classList.add('hidden');
 }
 
-els.modelSelect.addEventListener('change', () => warmUp(els.modelSelect.value));
+// Put the APPLIED values into the panel controls (draft starts = applied).
+function syncDraftToPanel() {
+    (applied.theme === 'light' ? $('themeLight') : $('themeDark')).checked = true;
+    if (applied.model) els.modelSelect.value = applied.model;
+    els.dialectSelect.value = applied.dialect;
+    els.connStr.value = applied.connStr;
+    els.connStr.disabled = applied.dialect === '';
+}
 
-// ---------- Data source toggle ----------
+function readDraft() {
+    const theme = document.querySelector('input[name="theme"]:checked')?.value || 'dark';
+    return {
+        theme,
+        model: els.modelSelect.value || '',
+        dialect: els.dialectSelect.value,
+        connStr: els.dialectSelect.value === '' ? '' : els.connStr.value.trim(),
+    };
+}
+
 els.dialectSelect.addEventListener('change', () => {
-    const custom = els.dialectSelect.value !== '';
-    els.connStr.disabled = !custom;
-    if (!custom) els.connStr.value = '';
+    els.connStr.disabled = els.dialectSelect.value === '';
+    if (els.dialectSelect.value === '') els.connStr.value = '';
 });
 
-// ---------- Messages ----------
-function clearEmptyState() {
-    const empty = els.messages.querySelector('.empty-state');
-    if (empty) empty.remove();
+els.settingsToggle.addEventListener('click', openSettings);
+els.settingsClose.addEventListener('click', () => { syncDraftToPanel(); applyTheme(applied.theme); closeSettings(); });
+els.settingsCancel.addEventListener('click', () => { syncDraftToPanel(); applyTheme(applied.theme); closeSettings(); });
+els.settingsBackdrop.addEventListener('click', () => { syncDraftToPanel(); applyTheme(applied.theme); closeSettings(); });
+
+els.settingsReset.addEventListener('click', () => {
+    // Reset the panel to defaults (not yet applied until Save).
+    $('themeDark').checked = true;
+    els.dialectSelect.value = '';
+    els.connStr.value = '';
+    els.connStr.disabled = true;
+    const firstAvailable = [...els.modelSelect.options].find(o => !o.disabled);
+    if (firstAvailable) els.modelSelect.value = firstAvailable.value;
+    els.settingsError.classList.add('hidden');
+});
+
+// Live-preview theme while choosing (revert on cancel).
+document.querySelectorAll('input[name="theme"]').forEach(r =>
+    r.addEventListener('change', () => applyTheme(readDraft().theme)));
+
+// SAVE: validate model + connection, then apply with a full-page mask.
+els.settingsSave.addEventListener('click', async () => {
+    const draft = readDraft();
+    els.settingsError.classList.add('hidden');
+
+    showMask('Applying settings…');
+    try {
+        // 1) Validate the connection string if a custom source is chosen.
+        if (draft.dialect !== '') {
+            if (!draft.connStr) throw new Error('Please enter a connection string.');
+            showMask('Testing database connection…');
+            const test = await fetch('/Chat/TestConnection', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ connectionString: draft.connStr, dialect: Number(draft.dialect) }),
+            }).then(r => r.json());
+            if (!test.ok) throw new Error(test.error || 'Database connection failed.');
+        }
+
+        // 2) Warm up the model (loads it into RAM; surfaces load errors).
+        if (draft.model) {
+            showMask(`Loading model ${draft.model}…`);
+            const warm = await fetch('/Chat/Warmup', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(draft.model),
+            }).then(r => r.json());
+            if (!warm.success) throw new Error(warm.error || 'Model failed to load.');
+        }
+
+        // 3) Commit the draft as applied.
+        applied = draft;
+        applyTheme(applied.theme);
+        saveSettings();
+        updateBadges();
+        hideMask();
+        closeSettings();
+    } catch (e) {
+        hideMask();
+        els.settingsError.textContent = e.message;
+        els.settingsError.classList.remove('hidden');
+        applyTheme(applied.theme); // revert any theme preview on failure
+    }
+});
+
+function showMask(text) { els.maskText.textContent = text; els.pageMask.classList.remove('hidden'); }
+function hideMask() { els.pageMask.classList.add('hidden'); }
+
+function updateBadges() {
+    els.activeModelBadge.innerHTML = `<i class="bi bi-cpu"></i> ${applied.model || 'default'}`;
+    const src = applied.dialect === '' ? 'Demo DB'
+        : ['PostgreSQL', 'MySQL', 'SQL Server'][Number(applied.dialect)] + ' (custom)';
+    els.activeSourceBadge.innerHTML = `<i class="bi bi-database"></i> ${src}`;
 }
+
+// ============================================================
+//  Messages
+// ============================================================
+function clearEmptyState() { els.messages.querySelector('.empty-state')?.remove(); }
 
 function addUserMessage(text) {
     clearEmptyState();
@@ -110,7 +228,9 @@ function addBotMessage() {
 
 function scrollDown() { els.messages.scrollTop = els.messages.scrollHeight; }
 
-// ---------- Result rendering: table + actions + chart ----------
+// ============================================================
+//  Result rendering: table + actions + charts
+// ============================================================
 function renderResult(area, result, sql) {
     if (!result || !result.columns || result.columns.length === 0) return;
 
@@ -119,7 +239,6 @@ function renderResult(area, result, sql) {
     meta.textContent = `${result.rowCount} row(s)`;
     area.appendChild(meta);
 
-    // Table
     const wrap = document.createElement('div');
     wrap.className = 'result-wrap';
     const table = document.createElement('table');
@@ -131,7 +250,6 @@ function renderResult(area, result, sql) {
     wrap.appendChild(table);
     area.appendChild(wrap);
 
-    // Actions: Show SQL, Excel, Chart
     const actions = document.createElement('div');
     actions.className = 'result-actions';
 
@@ -145,15 +263,23 @@ function renderResult(area, result, sql) {
 
     const chartable = detectChartable(result);
     if (chartable) {
-        const chartBtn = actionBtn('bi-bar-chart', 'Chart', 'btn-outline-warning');
         const chartHost = document.createElement('div');
         chartHost.className = 'chart-wrap';
-        chartBtn.onclick = () => {
-            if (chartHost.dataset.drawn) { chartHost.innerHTML = ''; delete chartHost.dataset.drawn; return; }
-            drawChart(chartHost, result, chartable);
-            chartHost.dataset.drawn = '1';
-        };
-        actions.appendChild(chartBtn);
+        let current = null;
+
+        const types = document.createElement('span');
+        types.className = 'chart-types';
+        ['bar', 'line', 'pie'].forEach(type => {
+            const icon = { bar: 'bi-bar-chart', line: 'bi-graph-up', pie: 'bi-pie-chart' }[type];
+            const b = actionBtn(icon, type[0].toUpperCase() + type.slice(1), 'btn-outline-warning');
+            b.onclick = () => {
+                if (current) current.destroy();
+                chartHost.innerHTML = '';
+                current = drawChart(chartHost, result, chartable, type);
+            };
+            types.appendChild(b);
+        });
+        actions.appendChild(types);
         area.appendChild(actions);
         area.appendChild(chartHost);
     } else {
@@ -168,84 +294,83 @@ function actionBtn(icon, label, cls) {
     return b;
 }
 
-// A result is chartable when it has at least one label (text) column and at
-// least one numeric column, with a sensible number of rows. Picks the first
-// numeric column as the value and the first non-numeric column as the label.
+// Chartable = has a label (text) column and a numeric column, reasonable row count.
 function detectChartable(result) {
     const n = result.columns.length;
     if (n < 2 || result.rowCount === 0 || result.rowCount > 50) return null;
-
     const colIsNumeric = i => result.rows.every(r => isNumeric(r[i]));
     let valueCol = -1, labelCol = -1;
     for (let i = 0; i < n; i++) {
         if (valueCol === -1 && colIsNumeric(i)) valueCol = i;
         else if (labelCol === -1 && !colIsNumeric(i)) labelCol = i;
     }
-    // Need one of each; a label that is also the id column is fine.
     if (valueCol === -1) return null;
     if (labelCol === -1) labelCol = valueCol === 0 ? 1 : 0;
     return { labelCol, valueCol };
 }
 
-function drawChart(host, result, cfg) {
+const PALETTE = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981',
+    '#3b82f6', '#ef4444', '#14b8a6', '#a855f7', '#eab308'];
+
+function drawChart(host, result, cfg, type) {
     const canvas = document.createElement('canvas');
     canvas.id = 'chart' + (++chartCounter);
     host.appendChild(canvas);
     const labels = result.rows.map(r => String(r[cfg.labelCol]));
     const data = result.rows.map(r => Number(r[cfg.valueCol]));
-    new Chart(canvas, {
-        type: 'bar',
+    const isPie = type === 'pie';
+    const colors = labels.map((_, i) => PALETTE[i % PALETTE.length]);
+    const tick = getComputedStyle(document.body).getPropertyValue('--text-dim') || '#94a3b8';
+
+    return new Chart(canvas, {
+        type,
         data: {
             labels,
             datasets: [{
                 label: result.columns[cfg.valueCol],
                 data,
-                backgroundColor: 'rgba(99,102,241,.6)',
-                borderColor: 'rgba(139,92,246,1)',
-                borderWidth: 1,
+                backgroundColor: isPie ? colors : 'rgba(99,102,241,.6)',
+                borderColor: isPie ? '#0f172a' : 'rgba(139,92,246,1)',
+                borderWidth: isPie ? 2 : 1,
+                fill: type === 'line' ? false : true,
+                tension: .3,
             }],
         },
         options: {
             responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#e2e8f0' } } },
-            scales: {
-                x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
-                y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+            plugins: { legend: { display: isPie, labels: { color: tick } } },
+            scales: isPie ? {} : {
+                x: { ticks: { color: tick }, grid: { color: 'rgba(148,163,184,.15)' } },
+                y: { ticks: { color: tick }, grid: { color: 'rgba(148,163,184,.15)' } },
             },
         },
     });
 }
 
 async function downloadExcel(result, sql) {
-    const payload = {
-        sql,
-        columns: result.columns,
-        rows: result.rows,
-    };
     const res = await fetch('/Chat/Export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sql, columns: result.columns, rows: result.rows }),
     });
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = 'query-result.xlsx';
-    a.click();
+    a.href = url; a.download = 'query-result.xlsx'; a.click();
     URL.revokeObjectURL(url);
 }
 
-// ---------- SSE streaming ----------
+// ============================================================
+//  SSE streaming
+// ============================================================
 async function ask(question) {
     addUserMessage(question);
     const ui = addBotMessage();
 
     const body = {
         question,
-        model: els.modelSelect.value || null,
-        connectionString: els.dialectSelect.value === '' ? null : (els.connStr.value || null),
-        dialect: els.dialectSelect.value === '' ? null : Number(els.dialectSelect.value),
+        model: applied.model || null,
+        connectionString: applied.dialect === '' ? null : (applied.connStr || null),
+        dialect: applied.dialect === '' ? null : Number(applied.dialect),
         history: history.slice(-MAX_HISTORY),
     };
 
@@ -255,11 +380,9 @@ async function ask(question) {
 
     try {
         const res = await fetch('/Chat/Ask', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
         });
-
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -268,7 +391,6 @@ async function ask(question) {
             const { done, value } = await reader.read();
             if (done) break;
             buffer += decoder.decode(value, { stream: true });
-
             const parts = buffer.split('\n\n');
             buffer = parts.pop();
             for (const part of parts) {
@@ -290,7 +412,6 @@ async function ask(question) {
                 } else if (chunk.type === 'done') {
                     ui.status.innerHTML = '';
                     ui.answer.classList.remove('typing');
-                    // Remember this turn for follow-up questions.
                     if (currentSql) history.push({ question, sql: currentSql });
                 } else if (chunk.type === 'error') {
                     ui.status.innerHTML = '';
@@ -308,7 +429,9 @@ async function ask(question) {
     }
 }
 
-// ---------- Wiring ----------
+// ============================================================
+//  Wiring
+// ============================================================
 els.form.addEventListener('submit', e => {
     e.preventDefault();
     const q = els.input.value.trim();
@@ -322,7 +445,7 @@ els.clearBtn.addEventListener('click', () => {
     els.messages.innerHTML = `<div class="empty-state">
         <i class="bi bi-chat-square-dots"></i>
         <h5>Ask anything about your data</h5>
-        <p>e.g. “Which students were absent this month?” or “Top 5 highest fees.”</p></div>`;
+        <p>e.g. “How many students are in each class?” or “Top 5 highest fees.”</p></div>`;
 });
 
 els.copySqlBtn.addEventListener('click', () => {
@@ -333,12 +456,21 @@ els.copySqlBtn.addEventListener('click', () => {
 
 function escapeHtml(v) {
     if (v === null || v === undefined) return '<span class="text-secondary">NULL</span>';
-    return String(v)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function isNumeric(v) { return v !== null && v !== '' && !isNaN(Number(v)); }
 
-// Init
+// ============================================================
+//  Init
+// ============================================================
+applyTheme(applied.theme);
 loadModels().then(() => {
-    if (els.modelSelect.value) warmUp(els.modelSelect.value);
+    // Ensure applied.model points at something valid, then warm it silently.
+    updateBadges();
+    if (applied.model) {
+        fetch('/Chat/Warmup', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(applied.model),
+        }).catch(() => {});
+    }
 });

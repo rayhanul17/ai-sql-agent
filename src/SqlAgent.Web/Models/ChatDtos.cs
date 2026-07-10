@@ -19,6 +19,13 @@ public sealed class AskDto
     public List<TurnDto> History { get; set; } = [];
 }
 
+/// <summary>Posted to /Chat/TestConnection to validate a runtime connection string.</summary>
+public sealed class TestConnectionDto
+{
+    public string? ConnectionString { get; set; }
+    public DbDialect? Dialect { get; set; }
+}
+
 /// <summary>Posted to /Chat/Export to build an .xlsx from an already-returned result.</summary>
 public sealed class ExportDto
 {
