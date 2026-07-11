@@ -12,6 +12,7 @@ const els = {
     sendBtn: $('sendBtn'), clearBtn: $('clearBtn'),
     providerSelect: $('providerSelect'), providerHint: $('providerHint'),
     modelSelect: $('modelSelect'), dialectSelect: $('dialectSelect'), connStr: $('connStr'),
+    connRequired: $('connRequired'), connError: $('connError'),
     sqlModalBody: $('sqlModalBody'), copySqlBtn: $('copySqlBtn'),
     settingsToggle: $('settingsToggle'), settingsPanel: $('settingsPanel'),
     settingsBackdrop: $('settingsBackdrop'), settingsClose: $('settingsClose'),
@@ -140,6 +141,7 @@ function syncDraftToPanel() {
     els.dialectSelect.value = applied.dialect;
     els.connStr.value = applied.connStr;
     els.connStr.disabled = applied.dialect === '';
+    updateConnRequired();
 }
 
 function readDraft() {
@@ -164,11 +166,28 @@ const CONN_TEMPLATES = {
 
 const ALL_TEMPLATES = Object.values(CONN_TEMPLATES);
 
+// Reflect required/optional state of the connection string for the chosen source.
+function updateConnRequired() {
+    const custom = els.dialectSelect.value !== '';
+    els.connRequired.hidden = !custom;
+    els.connStr.placeholder = custom
+        ? 'Enter a valid connection string (or edit the template above)'
+        : 'Leave empty to use the demo database';
+    if (!custom) clearConnError();
+}
+
+function clearConnError() {
+    els.connError.hidden = true;
+    els.connStr.classList.remove('is-invalid');
+}
+
 els.dialectSelect.addEventListener('change', () => {
     const v = els.dialectSelect.value;
     els.connStr.disabled = v === '';
+    clearConnError();
     if (v === '') {
         els.connStr.value = '';
+        updateConnRequired();
         return;
     }
     // Prefill the template for the chosen dialect. Overwrite when the box is
@@ -178,6 +197,12 @@ els.dialectSelect.addEventListener('change', () => {
     if (current === '' || ALL_TEMPLATES.includes(current)) {
         els.connStr.value = CONN_TEMPLATES[v] || '';
     }
+    updateConnRequired();
+});
+
+// Clear the error as soon as the user types something.
+els.connStr.addEventListener('input', () => {
+    if (els.connStr.value.trim()) clearConnError();
 });
 
 els.settingsToggle.addEventListener('click', openSettings);
@@ -201,22 +226,47 @@ document.querySelectorAll('input[name="theme"]').forEach(r =>
     r.addEventListener('change', () => applyTheme(readDraft().theme)));
 
 // Refresh schema: force re-introspect the source currently in the panel.
+let refreshing = false;
 els.refreshSchemaBtn.addEventListener('click', async () => {
+    if (refreshing) return; // guard against double-clicks while one is running
     const draft = readDraft();
-    els.schemaStatus.textContent = 'Reading schema…';
+
+    // Custom source needs a connection string — flag it instead of hanging.
+    if (draft.dialect !== '' && !draft.connStr) {
+        els.connError.textContent = 'A connection string is required for a custom database.';
+        els.connError.hidden = false;
+        els.connStr.classList.add('is-invalid');
+        els.connStr.focus();
+        return;
+    }
+    clearConnError();
+
     const body = draft.dialect === ''
         ? { force: true }
         : { connectionString: draft.connStr, dialect: Number(draft.dialect), force: true };
+
+    // Time-box the request so a bad host can't leave it spinning forever.
+    refreshing = true;
+    els.refreshSchemaBtn.disabled = true;
+    els.schemaStatus.textContent = 'Reading schema…';
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
     try {
         const r = await fetch('/Chat/LoadSchema', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+            body: JSON.stringify(body), signal: ctrl.signal,
         }).then(x => x.json());
         els.schemaStatus.textContent = r.success
             ? `Schema loaded: ${r.tableCount} tables, ${r.columnCount} columns.`
             : `Failed: ${r.error}`;
     } catch (e) {
-        els.schemaStatus.textContent = `Failed: ${e.message}`;
+        els.schemaStatus.textContent = e.name === 'AbortError'
+            ? 'Failed: timed out — check the host/port and that the database is reachable.'
+            : `Failed: ${e.message}`;
+    } finally {
+        clearTimeout(timer);
+        refreshing = false;
+        els.refreshSchemaBtn.disabled = false;
     }
 });
 
@@ -225,11 +275,20 @@ els.settingsSave.addEventListener('click', async () => {
     const draft = readDraft();
     els.settingsError.classList.add('hidden');
 
+    // Custom source requires a connection string — flag the field inline.
+    if (draft.dialect !== '' && !draft.connStr) {
+        els.connError.textContent = 'A connection string is required for a custom database.';
+        els.connError.hidden = false;
+        els.connStr.classList.add('is-invalid');
+        els.connStr.focus();
+        return;
+    }
+    clearConnError();
+
     showMask('Applying settings…');
     try {
         // 1) Validate the connection string if a custom source is chosen.
         if (draft.dialect !== '') {
-            if (!draft.connStr) throw new Error('Please enter a connection string.');
             showMask('Testing database connection…');
             const test = await fetch('/Chat/TestConnection', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },

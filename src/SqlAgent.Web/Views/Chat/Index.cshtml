@@ -82,7 +82,10 @@
         </div>
 
         <div class="side-section">
-            <label class="side-label"><i class="bi bi-database"></i> Data source</label>
+            <label class="side-label">
+                <i class="bi bi-database"></i> Data source
+                <span id="connRequired" class="required-star" hidden>*</span>
+            </label>
             <select id="dialectSelect" class="form-select form-select-sm mb-2">
                 <option value="">Demo database (default)</option>
                 <option value="0">PostgreSQL (custom)</option>
@@ -90,8 +93,9 @@
                 <option value="2">SQL Server (custom)</option>
             </select>
             <textarea id="connStr" class="form-control form-control-sm"
-                      rows="3" placeholder="Connection string (leave empty for demo DB)"
+                      rows="3" placeholder="Leave empty to use the demo database"
                       disabled></textarea>
+            <div id="connError" class="field-error" hidden></div>
             <div class="side-hint">
                 <i class="bi bi-shield-lock"></i>
                 Queries run read-only. Use a read-only DB user when possible.

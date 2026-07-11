@@ -203,6 +203,14 @@ table.result tr:hover td { background: var(--hover); }
     color: var(--text-dim); display: flex; align-items: center; gap: 6px;
 }
 .side-hint { font-size: .72rem; color: var(--text-dim); line-height: 1.4; margin-top: 4px; }
+
+/* Required field indicator + validation error. */
+.required-star { color: #f87171; font-weight: 700; margin-left: 2px; }
+.field-error { font-size: .74rem; color: #f87171; margin-top: 4px; }
+.form-control.is-invalid, .form-control.is-invalid:focus {
+    border-color: #f87171;
+    box-shadow: 0 0 0 .2rem rgba(248, 113, 113, .2);
+}
 .settings-error {
     font-size: .8rem; color: #f87171;
     background: rgba(248, 113, 113, .1); border: 1px solid rgba(248, 113, 113, .3);
