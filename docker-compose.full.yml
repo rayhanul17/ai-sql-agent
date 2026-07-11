@@ -89,6 +89,10 @@ services:
       # Optional Groq cloud key, read from a local .env file (see .env.example).
       # Leave GROQ_API_KEY unset to run with Ollama only.
       Groq__ApiKey: "${GROQ_API_KEY:-}"
+    volumes:
+      # Surface the container's log files on the host so you can read them
+      # directly (./docker-logs/agent-*.log) without docker exec.
+      - ./docker-logs:/app/Logs
 
 volumes:
   agent_pgdata:

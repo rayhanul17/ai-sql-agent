@@ -219,6 +219,37 @@ docker network connect ai-sql-agent_default mysql   # then use Server=mysql
 
 ---
 
+## Logs
+
+The app logs to the console **and** a daily rolling file
+`agent-yyyyMMdd.log`. It records startup config, model/data-source changes
+(on Save), the generated SQL, and errors. Connection-string passwords are masked.
+
+**Running natively** — the file is in the project folder:
+
+```bash
+# path: src/SqlAgent.Web/Logs/agent-<date>.log
+type   src\SqlAgent.Web\Logs\agent-*.log      # Windows
+cat    src/SqlAgent.Web/Logs/agent-*.log       # macOS/Linux
+```
+
+**Running in Docker** — the full stack mounts the container's logs to
+`./docker-logs` on your host, so just read them there:
+
+```bash
+cat ./docker-logs/agent-*.log
+```
+
+Or read them straight from the container:
+
+```bash
+docker logs -f agent-app                       # console stream (simplest)
+docker exec agent-app cat /app/Logs/agent-*.log  # the log file inside the container
+docker cp agent-app:/app/Logs ./container-logs   # copy the folder to the host
+```
+
+---
+
 ## LLM providers (Ollama + optional Groq)
 
 The app talks to LLMs through an `IAiProvider` abstraction, resolved per
