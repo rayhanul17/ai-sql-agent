@@ -230,6 +230,18 @@ docker network ls                                   # find e.g. ai-sql-agent_def
 docker network connect ai-sql-agent_default mysql   # then use Server=mysql
 ```
 
+### MySQL 8 note
+
+MySQL 8 defaults to the `caching_sha2_password` auth plugin. Over a non-SSL
+connection the client needs the server's RSA key, so add
+`AllowPublicKeyRetrieval=True` (the MySQL template already includes it):
+
+```
+Server=host.docker.internal;Port=3306;Database=your_db;User ID=root;Password=…;SslMode=None;AllowPublicKeyRetrieval=True
+```
+
+Without it you'll see *"Authentication method 'caching_sha2_password' failed …"*.
+
 ---
 
 ## Logs

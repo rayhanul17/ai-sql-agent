@@ -161,7 +161,7 @@ function readDraft() {
 // (avoids format mistakes). 0=PostgreSQL, 1=MySQL, 2=SQL Server.
 const CONN_TEMPLATES = {
     '0': 'Host=localhost;Port=5432;Database=DB_NAME;Username=postgres;Password=PASSWORD',
-    '1': 'Server=localhost;Port=3306;Database=DB_NAME;User ID=root;Password=PASSWORD;SslMode=None',
+    '1': 'Server=localhost;Port=3306;Database=DB_NAME;User ID=root;Password=PASSWORD;SslMode=None;AllowPublicKeyRetrieval=True',
     '2': 'Server=localhost,1433;Database=DB_NAME;User ID=sa;Password=PASSWORD;TrustServerCertificate=True',
 };
 
