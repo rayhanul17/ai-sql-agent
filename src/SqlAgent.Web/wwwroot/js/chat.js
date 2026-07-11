@@ -305,7 +305,10 @@ function renderResult(area, result, sql) {
     table.className = 'result';
     const thead = '<thead><tr>' + result.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr></thead>';
     const rowsHtml = result.rows.map(r =>
-        '<tr>' + r.map(v => `<td>${escapeHtml(v)}</td>`).join('') + '</tr>').join('');
+        '<tr>' + r.map(v => {
+            const s = v === null || v === undefined ? '' : String(v);
+            return `<td title="${escapeAttr(s)}">${escapeHtml(v)}</td>`;
+        }).join('') + '</tr>').join('');
     table.innerHTML = thead + '<tbody>' + rowsHtml + '</tbody>';
     wrap.appendChild(table);
     area.appendChild(wrap);
@@ -436,6 +439,7 @@ async function ask(question) {
     };
 
     els.sendBtn.disabled = true;
+    els.sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
     let answerText = '';
     let currentSql = null;
 
@@ -487,6 +491,8 @@ async function ask(question) {
         ui.answer.innerHTML = `<div class="text-danger">Connection error: ${escapeHtml(e.message)}</div>`;
     } finally {
         els.sendBtn.disabled = false;
+        els.sendBtn.innerHTML = '<i class="bi bi-send"></i>';
+        els.input.focus();
     }
 }
 
@@ -518,6 +524,10 @@ els.copySqlBtn.addEventListener('click', () => {
 function escapeHtml(v) {
     if (v === null || v === undefined) return '<span class="text-secondary">NULL</span>';
     return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escapeAttr(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 function isNumeric(v) { return v !== null && v !== '' && !isNaN(Number(v)); }
 
