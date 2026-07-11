@@ -80,6 +80,44 @@ docker-compose.yml          PostgreSQL (seeded) — Ollama runs natively
 
 ---
 
+## Quick start (reviewers) ⚡
+
+Only **Docker Desktop** is needed — no .NET SDK, no Visual Studio (the app is
+built inside a container).
+
+```bash
+git clone https://github.com/rayhanul17/ai-sql-agent.git
+cd ai-sql-agent
+
+# Run everything (PostgreSQL + Ollama + 3B model + app):
+docker compose -f docker-compose.full.yml up --build
+
+# → open http://localhost:8080
+```
+
+That's the whole thing on the local **Ollama 3B** model. The two options below
+are optional:
+
+**Also want the larger 7B model?** (~4.5 GB extra — needs more disk/RAM):
+
+```bash
+docker compose -f docker-compose.full.yml --profile full up --build
+```
+
+**Also want to try the Groq cloud provider?** Get a free key at
+<https://console.groq.com/keys> (no card needed), then:
+
+```bash
+cp .env.example .env         # then edit .env: GROQ_API_KEY=gsk_your_key
+docker compose -f docker-compose.full.yml up --build
+```
+
+`.env` is gitignored, so your key stays local. Without it, the Groq models
+simply appear disabled and everything runs on Ollama. In the app, pick the
+provider and model from the settings panel (gear / menu icon).
+
+---
+
 ## Getting started
 
 There are two ways to run it. **Path B needs only Docker** — no .NET SDK,
