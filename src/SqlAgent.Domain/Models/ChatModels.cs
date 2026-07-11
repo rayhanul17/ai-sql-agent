@@ -18,6 +18,9 @@ public sealed class AskRequest
     /// <summary>Dialect of the provided connection string. Ignored when using the demo DB.</summary>
     public DbDialect? Dialect { get; init; }
 
+    /// <summary>Which LLM provider to use. Null = configured default (Ollama).</summary>
+    public LlmProvider? Provider { get; init; }
+
     /// <summary>Optional model override (must be an available model). Null = configured default.</summary>
     public string? Model { get; init; }
 

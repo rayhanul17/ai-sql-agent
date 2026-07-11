@@ -23,12 +23,19 @@ public static class DependencyInjection
         services.AddScoped<ISchemaIntrospector, SchemaIntrospector>();
         services.AddScoped<ISqlExecutor, SqlExecutor>();
 
-        // AI provider (Semantic Kernel + Ollama). Model is chosen per request.
+        // AI providers (Semantic Kernel). Model is chosen per request; the
+        // resolver picks Ollama (local) or Groq (cloud) per request.
         services.AddSingleton<IAiProvider>(sp =>
         {
             var opts = sp.GetRequiredService<IOptions<OllamaOptions>>().Value;
             return new OllamaAiProvider(new Uri(opts.BaseUrl));
         });
+        services.AddSingleton<IAiProvider>(sp =>
+        {
+            var opts = sp.GetRequiredService<IOptions<GroqOptions>>().Value;
+            return new GroqAiProvider(opts.ApiKey, opts.BaseUrl);
+        });
+        services.AddSingleton<IAiProviderResolver, AiProviderResolver>();
 
         // Model manager uses a typed HttpClient to Ollama's management API.
         // A long timeout is required: warming up a large model is a COLD load

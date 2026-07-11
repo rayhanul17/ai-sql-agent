@@ -9,9 +9,15 @@ namespace SqlAgent.Domain.Contracts;
 /// </summary>
 public interface IModelManager
 {
-    /// <summary>Configured + pulled models, flagged with availability/loaded state.</summary>
+    /// <summary>
+    /// All configured models across providers, flagged with availability/loaded
+    /// state (Ollama: pulled/resident; Groq: available iff an API key is set).
+    /// </summary>
     Task<IReadOnlyList<ModelInfo>> GetModelsAsync(CancellationToken ct = default);
 
-    /// <summary>Force a model into memory with a tiny prompt; returns the load duration.</summary>
+    /// <summary>
+    /// Force an Ollama model into memory (returns load duration). For cloud
+    /// providers this is a no-op success (no warm-up needed).
+    /// </summary>
     Task<ModelWarmupResult> WarmUpAsync(string model, CancellationToken ct = default);
 }

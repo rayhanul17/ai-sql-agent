@@ -15,6 +15,7 @@ public sealed class AskDto
     public string Question { get; set; } = string.Empty;
     public string? ConnectionString { get; set; }
     public DbDialect? Dialect { get; set; }
+    public LlmProvider? Provider { get; set; }
     public string? Model { get; set; }
     public List<TurnDto> History { get; set; } = [];
 }

@@ -126,6 +126,30 @@ read-only, but a least-privileged user is the safest backstop.
 
 ---
 
+## LLM providers (Ollama + optional Groq)
+
+The app talks to LLMs through an `IAiProvider` abstraction, resolved per
+request. Two providers ship:
+
+| Provider | Where | Models | Notes |
+|----------|-------|--------|-------|
+| **Ollama** (default) | Local | `qwen2.5-coder:3b`, `:7b` | Free, offline, private |
+| **Groq** (optional) | Cloud | `qwen/qwen3-32b`, `llama-3.3-70b-versatile` | Very fast; needs a free API key |
+
+Pick the provider (and its model) from the settings panel. Ollama stays the
+primary/default; Groq is a fast cloud fallback — handy on machines where a
+local model is too slow.
+
+### Enabling Groq
+
+1. Get a free API key at <https://console.groq.com/keys> (no card required).
+2. Put it in `src/SqlAgent.Web/appsettings.Development.json` (gitignored):
+   ```json
+   { "Groq": { "ApiKey": "gsk_your_key_here" } }
+   ```
+   A `.template` file shows the shape. Never commit the real key.
+3. Restart the app — Groq models become selectable in the settings panel.
+
 ## Model strategy
 
 One family (**Qwen 2.5 Coder**) keeps prompting consistent while scaling by size:

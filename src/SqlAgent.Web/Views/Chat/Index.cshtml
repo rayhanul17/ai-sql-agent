@@ -67,8 +67,17 @@
         </div>
 
         <div class="side-section">
+            <label class="side-label"><i class="bi bi-hdd-network"></i> Provider</label>
+            <select id="providerSelect" class="form-select form-select-sm">
+                <option value="0">Ollama (Local)</option>
+                <option value="1">Groq (Cloud)</option>
+            </select>
+        </div>
+
+        <div class="side-section">
             <label class="side-label"><i class="bi bi-cpu"></i> Model</label>
             <select id="modelSelect" class="form-select form-select-sm"></select>
+            <div class="side-hint" id="providerHint"></div>
         </div>
 
         <div class="side-section">

@@ -83,6 +83,7 @@ public sealed class ChatController : Controller
             Question = dto.Question,
             ConnectionString = dto.ConnectionString,
             Dialect = dto.Dialect,
+            Provider = dto.Provider,
             Model = dto.Model,
             History = dto.History
                 .Select(t => new ConversationTurn { Question = t.Question, Sql = t.Sql })

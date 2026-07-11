@@ -29,6 +29,8 @@ logs/
 
 # ---- Local secrets / env ----
 appsettings.*.local.json
+# Development config holds the local Groq API key — never commit it.
+appsettings.Development.json
 *.env
 .env
 

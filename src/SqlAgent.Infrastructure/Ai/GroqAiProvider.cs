@@ -1,36 +1,36 @@
+using System.ClientModel;
 using System.Runtime.CompilerServices;
-using Microsoft.Extensions.AI;
 using Microsoft.SemanticKernel.ChatCompletion;
-using OllamaSharp;
+using Microsoft.SemanticKernel.Connectors.OpenAI;
+using OpenAI;
 using SqlAgent.Domain.Contracts;
 using SqlAgent.Domain.Models;
 
 namespace SqlAgent.Infrastructure.Ai;
 
 /// <summary>
-/// LLM provider backed by Semantic Kernel's Ollama connector (the .NET
-/// equivalent of LangChain). A fresh chat-completion service is built per
-/// call so the model can be switched at runtime (per request) without
-/// rebuilding a global kernel.
+/// Optional cloud provider. Groq exposes an OpenAI-compatible API, so we reuse
+/// Semantic Kernel's OpenAI connector, pointed at Groq's base URL. Fast enough
+/// that no warm-up/loading step is needed. Model is chosen per request.
 /// </summary>
-public sealed class OllamaAiProvider : IAiProvider
+public sealed class GroqAiProvider : IAiProvider
 {
+    private readonly string _apiKey;
     private readonly Uri _baseUri;
 
-    public OllamaAiProvider(Uri baseUri) => _baseUri = baseUri;
+    public GroqAiProvider(string apiKey, string baseUrl)
+    {
+        _apiKey = apiKey;
+        _baseUri = new Uri(baseUrl);
+    }
 
-    public LlmProvider Provider => LlmProvider.Ollama;
+    public LlmProvider Provider => LlmProvider.Groq;
 
-    // Semantic Kernel is the orchestrator. SK now sits on the
-    // Microsoft.Extensions.AI abstraction (IChatClient), so the recommended
-    // pattern is: build the Ollama client, then adapt it to SK's
-    // IChatCompletionService via AsChatCompletionService(). (The old
-    // OllamaChatCompletionService type is deprecated.) Model is passed here
-    // so it can be switched at runtime, per request.
     private IChatCompletionService Chat(string model)
     {
-        var client = new OllamaApiClient(_baseUri, model);
-        return ((IChatClient)client).AsChatCompletionService();
+        var options = new OpenAIClientOptions { Endpoint = _baseUri };
+        var client = new OpenAIClient(new ApiKeyCredential(_apiKey), options);
+        return new OpenAIChatCompletionService(model, client);
     }
 
     public async Task<string> GenerateSqlAsync(string prompt, string model, CancellationToken ct = default)

@@ -13,6 +13,7 @@ builder.Host.UseSerilog((ctx, cfg) => cfg
 // Options.
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection(AgentOptions.SectionName));
 builder.Services.Configure<OllamaOptions>(builder.Configuration.GetSection(OllamaOptions.SectionName));
+builder.Services.Configure<GroqOptions>(builder.Configuration.GetSection(GroqOptions.SectionName));
 
 // App layers.
 builder.Services.AddApplication();

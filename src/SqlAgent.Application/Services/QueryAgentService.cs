@@ -17,38 +17,41 @@ public sealed class QueryAgentService : IQueryAgentService
     private const int MaxRetries = 1; // one self-correction attempt on DB error
 
     private readonly ISchemaIntrospector _introspector;
-    private readonly IAiProvider _ai;
+    private readonly IAiProviderResolver _aiResolver;
     private readonly ISqlSafetyValidator _validator;
     private readonly ISqlExecutor _executor;
     private readonly PromptBuilder _prompts;
     private readonly ISqlDialectFactory _dialects;
     private readonly AgentOptions _agent;
     private readonly OllamaOptions _ollama;
+    private readonly GroqOptions _groq;
     private readonly ILogger<QueryAgentService> _log;
 
     public QueryAgentService(
         ISchemaIntrospector introspector,
-        IAiProvider ai,
+        IAiProviderResolver aiResolver,
         ISqlSafetyValidator validator,
         ISqlExecutor executor,
         PromptBuilder prompts,
         ISqlDialectFactory dialects,
         IOptions<AgentOptions> agent,
         IOptions<OllamaOptions> ollama,
+        IOptions<GroqOptions> groq,
         ILogger<QueryAgentService> log)
     {
         _introspector = introspector;
-        _ai = ai;
+        _aiResolver = aiResolver;
         _validator = validator;
         _executor = executor;
         _prompts = prompts;
         _dialects = dialects;
         _agent = agent.Value;
         _ollama = ollama.Value;
+        _groq = groq.Value;
         _log = log;
     }
 
-    private (string conn, DbDialect dialect, string model) Resolve(AskRequest req)
+    private (string conn, DbDialect dialect, IAiProvider ai, string model) Resolve(AskRequest req)
     {
         var conn = string.IsNullOrWhiteSpace(req.ConnectionString)
             ? _agent.DefaultConnectionString
@@ -56,20 +59,24 @@ public sealed class QueryAgentService : IQueryAgentService
         var dialect = string.IsNullOrWhiteSpace(req.ConnectionString)
             ? _agent.DefaultDialect
             : req.Dialect ?? _agent.DefaultDialect;
-        var model = string.IsNullOrWhiteSpace(req.Model) ? _ollama.DefaultModel : req.Model!;
-        return (conn, dialect, model);
+
+        var provider = req.Provider ?? _agent.DefaultProvider;
+        var ai = _aiResolver.Get(provider);
+        var defaultModel = provider == LlmProvider.Groq ? _groq.DefaultModel : _ollama.DefaultModel;
+        var model = string.IsNullOrWhiteSpace(req.Model) ? defaultModel : req.Model!;
+        return (conn, dialect, ai, model);
     }
 
     public async Task<AskResult> AskAsync(AskRequest request, CancellationToken ct = default)
     {
-        var (conn, dialectId, model) = Resolve(request);
+        var (conn, dialectId, ai, model) = Resolve(request);
         try
         {
             var dialect = _dialects.Get(dialectId);
             var schema = await _introspector.IntrospectAsync(conn, dialectId, ct);
 
             var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, _agent.MaxRows, request.History);
-            var rawSql = await _ai.GenerateSqlAsync(sqlPrompt, model, ct);
+            var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
             _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
 
             var validation = _validator.Validate(rawSql, dialect, _agent.MaxRows);
@@ -81,7 +88,7 @@ public sealed class QueryAgentService : IQueryAgentService
 
             var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result, request.History);
             var explanation = string.Empty;
-            await foreach (var tok in _ai.StreamExplanationAsync(explainPrompt, model, ct))
+            await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
                 explanation += tok;
 
             return new AskResult
@@ -104,7 +111,7 @@ public sealed class QueryAgentService : IQueryAgentService
     public async IAsyncEnumerable<StreamChunk> AskStreamAsync(
         AskRequest request, [EnumeratorCancellation] CancellationToken ct = default)
     {
-        var (conn, dialectId, model) = Resolve(request);
+        var (conn, dialectId, ai, model) = Resolve(request);
 
         // Resolve dialect.
         ISqlDialect? dialect = null;
@@ -135,7 +142,7 @@ public sealed class QueryAgentService : IQueryAgentService
                 var prompt = isRetry
                     ? _prompts.BuildRetryPrompt(request.Question, schema!, dialect!, _agent.MaxRows, prevSql!, lastError!, request.History)
                     : _prompts.BuildSqlPrompt(request.Question, schema!, dialect!, _agent.MaxRows, request.History);
-                rawSql = await _ai.GenerateSqlAsync(prompt, model, ct);
+                rawSql = await ai.GenerateSqlAsync(prompt, model, ct);
                 _log.LogInformation("Model {Model} generated SQL (attempt {Attempt}): {Sql}", model, attempt + 1, rawSql);
             });
             if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
@@ -165,7 +172,7 @@ public sealed class QueryAgentService : IQueryAgentService
         // Stream explanation.
         yield return Status("Explaining result...");
         var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!, request.History);
-        await foreach (var tok in _ai.StreamExplanationAsync(explainPrompt, model, ct))
+        await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
             yield return new StreamChunk { Type = "token", Content = tok };
 
         yield return new StreamChunk { Type = "done", Content = model };

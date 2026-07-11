@@ -9,6 +9,9 @@ namespace SqlAgent.Domain.Contracts;
 /// </summary>
 public interface IAiProvider
 {
+    /// <summary>Which provider this implementation serves.</summary>
+    LlmProvider Provider { get; }
+
     /// <summary>Generate a single SQL statement from a grounded prompt (non-streamed).</summary>
     Task<string> GenerateSqlAsync(string prompt, string model, CancellationToken ct = default);
 
@@ -17,4 +20,10 @@ public interface IAiProvider
     /// </summary>
     IAsyncEnumerable<string> StreamExplanationAsync(
         string prompt, string model, CancellationToken ct = default);
+}
+
+/// <summary>Resolves the right <see cref="IAiProvider"/> for a given <see cref="LlmProvider"/>.</summary>
+public interface IAiProviderResolver
+{
+    IAiProvider Get(LlmProvider provider);
 }

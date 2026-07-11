@@ -18,4 +18,7 @@ public sealed class AgentOptions
 
     /// <summary>Dialect of the default demo database.</summary>
     public DbDialect DefaultDialect { get; set; } = DbDialect.PostgreSql;
+
+    /// <summary>Default LLM provider (Ollama is local/primary).</summary>
+    public LlmProvider DefaultProvider { get; set; } = LlmProvider.Ollama;
 }

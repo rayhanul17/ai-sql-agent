@@ -8,9 +8,10 @@ public sealed class ModelInfo
 {
     public required string Id { get; init; }        // e.g. "qwen2.5-coder:3b"
     public required string DisplayName { get; init; } // e.g. "Qwen 2.5 Coder 3B (Minimum)"
+    public LlmProvider Provider { get; init; }      // Ollama or Groq
     public string? Tier { get; init; }              // e.g. "Minimum" / "Almost Best"
-    public bool IsAvailable { get; init; }          // pulled on the Ollama host
-    public bool IsLoaded { get; init; }             // currently resident in RAM (/api/ps)
+    public bool IsAvailable { get; init; }          // Ollama: pulled; Groq: key configured
+    public bool IsLoaded { get; init; }             // Ollama: resident in RAM; Groq: always false
 }
 
 /// <summary>Result of warming up (loading) a model into memory.</summary>

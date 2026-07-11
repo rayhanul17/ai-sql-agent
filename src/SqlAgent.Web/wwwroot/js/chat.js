@@ -10,6 +10,7 @@ const $ = id => document.getElementById(id);
 const els = {
     messages: $('messages'), form: $('askForm'), input: $('questionInput'),
     sendBtn: $('sendBtn'), clearBtn: $('clearBtn'),
+    providerSelect: $('providerSelect'), providerHint: $('providerHint'),
     modelSelect: $('modelSelect'), dialectSelect: $('dialectSelect'), connStr: $('connStr'),
     sqlModalBody: $('sqlModalBody'), copySqlBtn: $('copySqlBtn'),
     settingsToggle: $('settingsToggle'), settingsPanel: $('settingsPanel'),
@@ -27,8 +28,9 @@ const history = [];
 const MAX_HISTORY = 4;
 
 // ---- Applied (active) settings vs. draft (in the panel, unsaved) ----
-const DEFAULTS = { theme: 'dark', model: '', dialect: '', connStr: '' };
+const DEFAULTS = { theme: 'dark', provider: '0', model: '', dialect: '', connStr: '' };
 let applied = loadSettings();
+let allModels = []; // full catalog across providers
 
 function loadSettings() {
     try {
@@ -62,24 +64,42 @@ els.themeToggle.addEventListener('click', () => {
 async function loadModels() {
     try {
         const res = await fetch('/Chat/Models');
-        const models = await res.json();
-        els.modelSelect.innerHTML = '';
-        models.forEach(m => {
+        allModels = await res.json();
+    } catch {
+        allModels = [];
+    }
+    populateModels(Number(applied.provider));
+}
+
+// Fill the Model dropdown with the chosen provider's models (cascading).
+function populateModels(provider) {
+    const list = allModels.filter(m => m.provider === provider);
+    els.modelSelect.innerHTML = '';
+
+    if (list.length === 0) {
+        els.modelSelect.innerHTML = '<option value="">No models</option>';
+    } else {
+        list.forEach(m => {
             const opt = document.createElement('option');
             opt.value = m.id;
-            opt.textContent = m.displayName + (m.isAvailable ? '' : ' (not pulled)');
+            const note = m.isAvailable ? '' : (provider === 1 ? ' (no API key)' : ' (not pulled)');
+            opt.textContent = m.displayName + note;
             opt.disabled = !m.isAvailable;
             els.modelSelect.appendChild(opt);
         });
-        // Prefer the applied model, else the first available.
-        const wanted = applied.model && models.some(m => m.id === applied.model && m.isAvailable)
-            ? applied.model : (models.find(m => m.isAvailable)?.id || '');
-        applied.model = wanted;
+        const wanted = applied.model && list.some(m => m.id === applied.model && m.isAvailable)
+            ? applied.model : (list.find(m => m.isAvailable)?.id || list[0].id);
         els.modelSelect.value = wanted;
-    } catch {
-        els.modelSelect.innerHTML = '<option>Ollama not reachable</option>';
     }
+
+    els.providerHint.textContent = provider === 1
+        ? 'Cloud (fast). Requires a Groq API key in appsettings.Development.json.'
+        : 'Local Ollama. First use of a model loads it into RAM.';
 }
+
+// Provider dropdown -> repopulate models for that provider.
+els.providerSelect.addEventListener('change', () =>
+    populateModels(Number(els.providerSelect.value)));
 
 // ============================================================
 //  Settings panel — deferred apply
@@ -98,6 +118,8 @@ function closeSettings() {
 // Put the APPLIED values into the panel controls (draft starts = applied).
 function syncDraftToPanel() {
     (applied.theme === 'light' ? $('themeLight') : $('themeDark')).checked = true;
+    els.providerSelect.value = applied.provider;
+    populateModels(Number(applied.provider));
     if (applied.model) els.modelSelect.value = applied.model;
     els.dialectSelect.value = applied.dialect;
     els.connStr.value = applied.connStr;
@@ -108,6 +130,7 @@ function readDraft() {
     const theme = document.querySelector('input[name="theme"]:checked')?.value || 'dark';
     return {
         theme,
+        provider: els.providerSelect.value,
         model: els.modelSelect.value || '',
         dialect: els.dialectSelect.value,
         connStr: els.dialectSelect.value === '' ? '' : els.connStr.value.trim(),
@@ -127,11 +150,11 @@ els.settingsBackdrop.addEventListener('click', () => { syncDraftToPanel(); apply
 els.settingsReset.addEventListener('click', () => {
     // Reset the panel to defaults (not yet applied until Save).
     $('themeDark').checked = true;
+    els.providerSelect.value = '0';
+    populateModels(0);
     els.dialectSelect.value = '';
     els.connStr.value = '';
     els.connStr.disabled = true;
-    const firstAvailable = [...els.modelSelect.options].find(o => !o.disabled);
-    if (firstAvailable) els.modelSelect.value = firstAvailable.value;
     els.settingsError.classList.add('hidden');
 });
 
@@ -157,9 +180,13 @@ els.settingsSave.addEventListener('click', async () => {
             if (!test.ok) throw new Error(test.error || 'Database connection failed.');
         }
 
-        // 2) Warm up the model (loads it into RAM; surfaces load errors).
+        // 2) Warm up the model. For Ollama this is a cold RAM load; for Groq
+        //    (cloud) the backend returns success instantly.
         if (draft.model) {
-            showMask(`Loading model ${draft.model}… (larger models can take a few minutes)`);
+            const isCloud = draft.provider === '1';
+            showMask(isCloud
+                ? `Checking model ${draft.model}…`
+                : `Loading model ${draft.model}… (larger models can take a few minutes)`);
             const warm = await fetch('/Chat/Warmup', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(draft.model),
@@ -186,7 +213,8 @@ function showMask(text) { els.maskText.textContent = text; els.pageMask.classLis
 function hideMask() { els.pageMask.classList.add('hidden'); }
 
 function updateBadges() {
-    els.activeModelBadge.innerHTML = `<i class="bi bi-cpu"></i> ${applied.model || 'default'}`;
+    const providerName = applied.provider === '1' ? 'Groq' : 'Ollama';
+    els.activeModelBadge.innerHTML = `<i class="bi bi-cpu"></i> ${providerName}: ${applied.model || 'default'}`;
     const src = applied.dialect === '' ? 'Demo DB'
         : ['PostgreSQL', 'MySQL', 'SQL Server'][Number(applied.dialect)] + ' (custom)';
     els.activeSourceBadge.innerHTML = `<i class="bi bi-database"></i> ${src}`;
@@ -368,6 +396,7 @@ async function ask(question) {
 
     const body = {
         question,
+        provider: Number(applied.provider),
         model: applied.model || null,
         connectionString: applied.dialect === '' ? null : (applied.connStr || null),
         dialect: applied.dialect === '' ? null : Number(applied.dialect),
@@ -465,8 +494,10 @@ function isNumeric(v) { return v !== null && v !== '' && !isNaN(Number(v)); }
 // ============================================================
 applyTheme(applied.theme);
 loadModels().then(() => {
-    // Ensure applied.model points at something valid, then warm it silently.
+    // If no model chosen yet, adopt the current provider's first available.
+    if (!applied.model) applied.model = els.modelSelect.value || '';
     updateBadges();
+    // Silently warm the model for the active provider (Groq no-ops server-side).
     if (applied.model) {
         fetch('/Chat/Warmup', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },

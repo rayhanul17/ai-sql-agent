@@ -19,11 +19,13 @@ public sealed class OllamaModelManager : IModelManager
 {
     private readonly HttpClient _http;
     private readonly OllamaOptions _options;
+    private readonly GroqOptions _groq;
 
-    public OllamaModelManager(HttpClient http, IOptions<OllamaOptions> options)
+    public OllamaModelManager(HttpClient http, IOptions<OllamaOptions> options, IOptions<GroqOptions> groq)
     {
         _http = http;
         _options = options.Value;
+        _groq = groq.Value;
         _http.BaseAddress = new Uri(_options.BaseUrl);
     }
 
@@ -32,18 +34,36 @@ public sealed class OllamaModelManager : IModelManager
         var available = await GetNamesAsync("/api/tags", ct);
         var loaded = await GetNamesAsync("/api/ps", ct);
 
-        return _options.Models.Select(m => new ModelInfo
+        var models = _options.Models.Select(m => new ModelInfo
         {
             Id = m.Id,
             DisplayName = m.DisplayName,
+            Provider = LlmProvider.Ollama,
             Tier = m.Tier,
             IsAvailable = available.Contains(m.Id),
             IsLoaded = loaded.Contains(m.Id)
         }).ToList();
+
+        // Groq cloud models: available only when an API key is configured.
+        models.AddRange(_groq.Models.Select(m => new ModelInfo
+        {
+            Id = m.Id,
+            DisplayName = m.DisplayName,
+            Provider = LlmProvider.Groq,
+            Tier = m.Tier,
+            IsAvailable = _groq.IsConfigured,
+            IsLoaded = false
+        }));
+
+        return models;
     }
 
     public async Task<ModelWarmupResult> WarmUpAsync(string model, CancellationToken ct = default)
     {
+        // Cloud (Groq) models need no warm-up; report success immediately.
+        if (_groq.Models.Any(m => string.Equals(m.Id, model, StringComparison.OrdinalIgnoreCase)))
+            return new ModelWarmupResult { ModelId = model, Success = true, LoadDurationMs = 0 };
+
         try
         {
             var payload = new { model, prompt = "hi", stream = false };
@@ -64,7 +84,11 @@ public sealed class OllamaModelManager : IModelManager
     {
         try
         {
-            var resp = await _http.GetFromJsonAsync<ModelListResponse>(path, ct);
+            // The shared HttpClient has a long timeout for model warm-up; the
+            // lightweight list calls must fail fast if Ollama is down.
+            using var quick = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            quick.CancelAfter(TimeSpan.FromSeconds(3));
+            var resp = await _http.GetFromJsonAsync<ModelListResponse>(path, quick.Token);
             return resp?.Models?.Select(m => m.Name).ToHashSet(StringComparer.OrdinalIgnoreCase)
                    ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         }
