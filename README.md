@@ -30,6 +30,10 @@ Ask things like:
 - *"Top 5 teachers by salary."*
 - *"How many fees are still unpaid for July?"*
 
+See **[EXAMPLES.md](EXAMPLES.md)** for a big copy‑paste set — English / Bangla /
+Banglish questions and direct SQL (correct, partially‑wrong, and rejected) for
+both the demo PostgreSQL DB and the MySQL classicmodels sample.
+
 ---
 
 ## Key features
