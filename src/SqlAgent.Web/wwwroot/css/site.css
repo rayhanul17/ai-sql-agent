@@ -43,7 +43,8 @@ html, body {
 .app-shell {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    height: 100vh;       /* fallback */
+    height: 100dvh;      /* dynamic viewport: excludes mobile browser bars */
     overflow: hidden;
 }
 
@@ -183,7 +184,7 @@ table.result tr:hover td { background: var(--hover); }
     position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 1040;
 }
 .settings-panel {
-    position: fixed; top: 0; right: 0; height: 100vh; width: 340px; max-width: 90vw;
+    position: fixed; top: 0; right: 0; height: 100vh; height: 100dvh; width: 340px; max-width: 90vw;
     background: var(--panel); border-left: 1px solid var(--border); z-index: 1050;
     display: flex; flex-direction: column;
     box-shadow: -8px 0 24px rgba(0, 0, 0, .25);
