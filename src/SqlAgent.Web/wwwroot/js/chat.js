@@ -28,6 +28,21 @@ let chartCounter = 0;
 const history = [];
 const MAX_HISTORY = 4;
 
+// Tracks the in-flight request so it can be cancelled (stop button / clear chat).
+let currentAbort = null;
+const SEND_ICON = '<i class="bi bi-send"></i>';
+const STOP_ICON = '<i class="bi bi-stop-fill"></i>';
+
+function setSending(on) {
+    els.sendBtn.innerHTML = on ? STOP_ICON : SEND_ICON;
+    els.sendBtn.title = on ? 'Stop' : 'Send';
+    els.sendBtn.disabled = false; // stays clickable so it can cancel
+}
+
+function cancelInFlight() {
+    if (currentAbort) { currentAbort.abort(); currentAbort = null; }
+}
+
 // ---- Applied (active) settings vs. draft (in the panel, unsaved) ----
 const DEFAULTS = { theme: 'dark', provider: '0', model: '', dialect: '', connStr: '' };
 let applied = loadSettings();
@@ -460,8 +475,11 @@ async function ask(question) {
         history: history.slice(-MAX_HISTORY),
     };
 
-    els.sendBtn.disabled = true;
-    els.sendBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    // New request: cancel any previous one, show the stop button.
+    cancelInFlight();
+    const abort = new AbortController();
+    currentAbort = abort;
+    setSending(true);
     let answerText = '';
     let currentSql = null;
 
@@ -469,6 +487,7 @@ async function ask(question) {
         const res = await fetch('/Chat/Ask', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
+            signal: abort.signal,
         });
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -510,10 +529,15 @@ async function ask(question) {
     } catch (e) {
         ui.status.innerHTML = '';
         ui.answer.classList.remove('typing');
-        ui.answer.innerHTML = `<div class="text-danger">Connection error: ${escapeHtml(e.message)}</div>`;
+        if (e.name === 'AbortError') {
+            // User stopped it — leave whatever streamed so far, mark as stopped.
+            if (!answerText) ui.answer.innerHTML = '<span class="text-secondary">Stopped.</span>';
+        } else {
+            ui.answer.innerHTML = `<div class="text-danger">Connection error: ${escapeHtml(e.message)}</div>`;
+        }
     } finally {
-        els.sendBtn.disabled = false;
-        els.sendBtn.innerHTML = '<i class="bi bi-send"></i>';
+        if (currentAbort === abort) currentAbort = null;
+        setSending(false);
         els.input.focus();
     }
 }
@@ -523,6 +547,12 @@ async function ask(question) {
 // ============================================================
 els.form.addEventListener('submit', e => {
     e.preventDefault();
+    // If a request is in flight, the button is a Stop button — cancel it.
+    if (currentAbort) {
+        cancelInFlight();
+        setSending(false);
+        return;
+    }
     const q = els.input.value.trim();
     if (!q) return;
     els.input.value = '';
@@ -530,6 +560,8 @@ els.form.addEventListener('submit', e => {
 });
 
 els.clearBtn.addEventListener('click', () => {
+    cancelInFlight();      // stop any in-flight request so the button doesn't spin
+    setSending(false);
     history.length = 0;
     els.messages.innerHTML = `<div class="empty-state">
         <i class="bi bi-chat-square-dots"></i>
