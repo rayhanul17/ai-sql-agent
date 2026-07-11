@@ -67,9 +67,11 @@ public sealed class SqlExecutor : ISqlExecutor
         return result;
     }
 
-    // Postgres & MySQL support SET TRANSACTION READ ONLY as a session/txn guard.
-    // SQL Server has no equivalent statement; the validator + read-only login
-    // are relied on there (documented limitation).
+    // Postgres & MySQL support a real SET TRANSACTION READ ONLY session guard.
+    // SQL Server has no such statement — its read-only story is instead
+    // ApplicationIntent=ReadOnly (set in DbConnectionFactory), the SELECT-only
+    // validator, the always-rolled-back transaction, and ideally a read-only
+    // login. See the README for the SQL Server caveat.
     private static async Task BeginReadOnlyAsync(DbConnection conn, DbDialect dialect, CancellationToken ct)
     {
         string? guard = dialect switch

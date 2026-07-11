@@ -27,21 +27,24 @@ public sealed class SqlServerDialect : ISqlDialect
             fk.ref AS fk_reference
         FROM INFORMATION_SCHEMA.COLUMNS c
         LEFT JOIN (
-            SELECT kcu.TABLE_NAME, kcu.COLUMN_NAME
+            SELECT kcu.TABLE_SCHEMA, kcu.TABLE_NAME, kcu.COLUMN_NAME
             FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
             JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
               ON tc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+             AND tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
             WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-        ) pk ON pk.TABLE_NAME = c.TABLE_NAME AND pk.COLUMN_NAME = c.COLUMN_NAME
+        ) pk ON pk.TABLE_SCHEMA = c.TABLE_SCHEMA
+            AND pk.TABLE_NAME = c.TABLE_NAME AND pk.COLUMN_NAME = c.COLUMN_NAME
         LEFT JOIN (
-            SELECT kcu.TABLE_NAME, kcu.COLUMN_NAME,
+            SELECT DISTINCT kcu.TABLE_SCHEMA, kcu.TABLE_NAME, kcu.COLUMN_NAME,
                    OBJECT_NAME(fkc.referenced_object_id) + '.' +
                    COL_NAME(fkc.referenced_object_id, fkc.referenced_column_id) AS ref
             FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
             JOIN sys.foreign_key_columns fkc
               ON fkc.parent_object_id = OBJECT_ID(kcu.TABLE_SCHEMA + '.' + kcu.TABLE_NAME)
              AND COL_NAME(fkc.parent_object_id, fkc.parent_column_id) = kcu.COLUMN_NAME
-        ) fk ON fk.TABLE_NAME = c.TABLE_NAME AND fk.COLUMN_NAME = c.COLUMN_NAME
+        ) fk ON fk.TABLE_SCHEMA = c.TABLE_SCHEMA
+            AND fk.TABLE_NAME = c.TABLE_NAME AND fk.COLUMN_NAME = c.COLUMN_NAME
         WHERE c.TABLE_SCHEMA = 'dbo'
         ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION;
         """;

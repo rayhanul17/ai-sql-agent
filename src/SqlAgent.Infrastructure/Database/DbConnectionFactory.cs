@@ -17,7 +17,27 @@ public sealed class DbConnectionFactory
     {
         DbDialect.PostgreSql => new NpgsqlConnection(connectionString),
         DbDialect.MySql => new MySqlConnection(connectionString),
-        DbDialect.SqlServer => new SqlConnection(connectionString),
+        DbDialect.SqlServer => new SqlConnection(SqlServerReadOnly(connectionString)),
         _ => throw new NotSupportedException($"Dialect {dialect} is not supported.")
     };
+
+    // SQL Server has no "SET TRANSACTION READ ONLY". Signal read-only intent on
+    // the connection instead (ApplicationIntent=ReadOnly) so a read-only replica
+    // is used where one exists; combined with the SELECT-only validator and the
+    // rolled-back transaction this is the SQL Server read-only story.
+    private static string SqlServerReadOnly(string connectionString)
+    {
+        try
+        {
+            var b = new SqlConnectionStringBuilder(connectionString)
+            {
+                ApplicationIntent = ApplicationIntent.ReadOnly
+            };
+            return b.ConnectionString;
+        }
+        catch
+        {
+            return connectionString; // malformed string: let SqlConnection surface the error
+        }
+    }
 }

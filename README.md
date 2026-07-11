@@ -55,15 +55,28 @@ both the demo PostgreSQL DB and the MySQL classicmodels sample.
 
 The LLM is **never trusted**. A generated query must pass every layer:
 
-1. **Cleaned** — markdown fences / labels stripped from the model output.
-2. **Single statement** — `;`-chained payloads rejected.
+1. **Cleaned** — markdown fences / `<think>` blocks / labels stripped from the model output.
+2. **Single statement** — text after the first `;` is dropped, so `;`-chained payloads can't run.
 3. **SELECT-only** — must start with `SELECT` (or a `WITH … SELECT` CTE).
 4. **Keyword blocklist** — `INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE/GRANT/EXEC/…` rejected.
-5. **Forced row limit** — a dialect-aware `LIMIT`/`TOP` is injected if missing.
-6. **READ ONLY transaction** — executed read-only; the DB refuses writes.
-7. **Read-only DB user** — the demo DB connects as a `SELECT`-only role.
-8. **Statement timeout** — heavy queries are killed.
-9. **Audit log** — every generated SQL is logged (Serilog).
+5. **READ ONLY transaction** — executed inside a transaction that is always rolled back (never committed).
+6. **Read-only DB user** — the demo DB connects as a `SELECT`-only role.
+7. **Statement timeout** — heavy queries are killed.
+8. **Audit log** — every generated SQL is logged (Serilog).
+
+### Read-only enforcement by dialect
+
+The database-level guard differs because the engines differ:
+
+| Dialect | DB-level read-only guard |
+|---------|--------------------------|
+| **PostgreSQL** | `SET SESSION … TRANSACTION READ ONLY` — the DB itself rejects writes. |
+| **MySQL** | `SET SESSION TRANSACTION READ ONLY` — the DB itself rejects writes. |
+| **SQL Server** | No such statement exists in T-SQL. It uses `ApplicationIntent=ReadOnly` (routes to a read replica where one exists) plus the SELECT-only validator, the rolled-back transaction, and — recommended — a **read-only login**. |
+
+So on SQL Server the strongest backstop is a least-privileged (read-only) login;
+the app-level validator is the primary guard. On PostgreSQL/MySQL the DB enforces
+read-only directly as well.
 
 ---
 
@@ -345,9 +358,12 @@ Most of these scale away with a larger model (7B, or the Groq cloud models):
   a database with ~100+ tables produces a very large prompt. That can exceed a
   cloud model's per-minute token limit (Groq free tier) or be slow on a local
   CPU model. This app targets small-to-medium schemas (the seeded demo, or a
-  focused DB); relevant-table selection for huge schemas is future work. Runtime
-  connection strings for Postgres/MySQL/SQL Server are supported and were
-  verified to connect and introspect (e.g. a 140-table MySQL read fine).
+  focused DB); relevant-table selection for huge schemas is future work.
+- **Dialect coverage.** PostgreSQL and MySQL are exercised end-to-end (the demo
+  Postgres DB and a real MySQL, incl. a 140-table read). **SQL Server** shares
+  the same abstraction and its introspection/read-only paths are implemented,
+  but it hasn't been run against a live SQL Server instance yet — treat it as
+  supported-but-unverified, and use a read-only login (see the safety section).
 - **Local speed.** On a CPU-only machine, Ollama replies token-by-token but
   slowly, and switching to a larger local model has a cold-load delay. Groq
   (cloud) is near-instant — handy for demos on modest hardware.

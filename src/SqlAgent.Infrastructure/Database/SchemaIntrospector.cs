@@ -48,7 +48,11 @@ public sealed class SchemaIntrospector : ISchemaIntrospector
                 table = new TableSchema { Schema = string.Empty, Name = tableName };
                 tables[tableName] = table;
             }
-            table.Columns.Add(column);
+            // A column in multiple/composite foreign keys yields several rows in
+            // the MySQL/SQL Server introspection joins; keep only the first so
+            // the schema shown to the model has no duplicate columns.
+            if (!table.Columns.Any(c => string.Equals(c.Name, column.Name, StringComparison.OrdinalIgnoreCase)))
+                table.Columns.Add(column);
         }
 
         return new DatabaseSchema { Dialect = dialect, Tables = tables.Values.ToList() };
