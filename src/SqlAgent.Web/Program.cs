@@ -6,9 +6,16 @@ using SqlAgent.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 
 // Structured logging (also captures every generated SQL for audit).
+// Writes to the console AND a rolling daily file under logs/ so nothing is
+// lost if the app exits unexpectedly.
 builder.Host.UseSerilog((ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
-    .WriteTo.Console());
+    .WriteTo.Console()
+    .WriteTo.File(
+        path: Path.Combine(AppContext.BaseDirectory, "logs", "agent-.log"),
+        rollingInterval: RollingInterval.Day,
+        shared: true,
+        retainedFileCountLimit: 7));
 
 // Options.
 builder.Services.Configure<AgentOptions>(builder.Configuration.GetSection(AgentOptions.SectionName));

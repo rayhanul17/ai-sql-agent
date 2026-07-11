@@ -142,9 +142,9 @@ function readDraft() {
 // picked, prefill the template so users only edit the credentials / db name
 // (avoids format mistakes). 0=PostgreSQL, 1=MySQL, 2=SQL Server.
 const CONN_TEMPLATES = {
-    '0': 'Host=localhost;Port=5432;Database=your_db;Username=postgres;Password=your_password',
-    '1': 'Server=localhost;Port=3306;Database=your_db;User ID=root;Password=your_password;SslMode=None',
-    '2': 'Server=localhost,1433;Database=your_db;User ID=sa;Password=your_password;TrustServerCertificate=True',
+    '0': 'Host=localhost;Port=5432;Database=DB_NAME;Username=postgres;Password=PASSWORD',
+    '1': 'Server=localhost;Port=3306;Database=DB_NAME;User ID=root;Password=PASSWORD;SslMode=None',
+    '2': 'Server=localhost,1433;Database=DB_NAME;User ID=sa;Password=PASSWORD;TrustServerCertificate=True',
 };
 
 els.dialectSelect.addEventListener('change', () => {

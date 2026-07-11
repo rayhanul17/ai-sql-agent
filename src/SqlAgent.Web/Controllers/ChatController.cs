@@ -101,11 +101,28 @@ public sealed class ChatController : Controller
                 .ToList()
         };
 
-        await foreach (var chunk in _agent.AskStreamAsync(request, ct))
+        try
         {
-            var payload = JsonSerializer.Serialize(chunk, JsonOpts);
-            await Response.WriteAsync($"data: {payload}\n\n", ct);
-            await Response.Body.FlushAsync(ct);
+            await foreach (var chunk in _agent.AskStreamAsync(request, ct))
+            {
+                var payload = JsonSerializer.Serialize(chunk, JsonOpts);
+                await Response.WriteAsync($"data: {payload}\n\n", ct);
+                await Response.Body.FlushAsync(ct);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Client navigated away / cancelled — normal, not an error.
+            _log.LogDebug("Ask stream cancelled by the client.");
+        }
+        catch (Exception ex)
+        {
+            // Surface any unexpected failure to the UI instead of crashing.
+            _log.LogError(ex, "Ask stream failed");
+            var msg = $"Something went wrong: {ex.Message}. Please check the log file (logs/agent-*.log) for details.";
+            var payload = JsonSerializer.Serialize(
+                new StreamChunk { Type = "error", Content = msg }, JsonOpts);
+            try { await Response.WriteAsync($"data: {payload}\n\n"); } catch { /* connection gone */ }
         }
     }
 
