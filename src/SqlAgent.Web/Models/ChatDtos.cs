@@ -27,6 +27,14 @@ public sealed class TestConnectionDto
     public DbDialect? Dialect { get; set; }
 }
 
+/// <summary>Posted to /Chat/LoadSchema to introspect + cache a data source's schema.</summary>
+public sealed class LoadSchemaDto
+{
+    public string? ConnectionString { get; set; }
+    public DbDialect? Dialect { get; set; }
+    public bool Force { get; set; }
+}
+
 /// <summary>Posted to /Chat/Export to build an .xlsx from an already-returned result.</summary>
 public sealed class ExportDto
 {

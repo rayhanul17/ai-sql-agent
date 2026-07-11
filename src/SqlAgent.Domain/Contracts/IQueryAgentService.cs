@@ -17,4 +17,12 @@ public interface IQueryAgentService
     /// tokens, then a done chunk. Backs the SSE endpoint.
     /// </summary>
     IAsyncEnumerable<StreamChunk> AskStreamAsync(AskRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Introspect and cache the full schema for a data source (called on Save and
+    /// by the "refresh schema" button). <paramref name="force"/> re-reads even if
+    /// cached. Returns the table/column count summary, or throws on failure.
+    /// </summary>
+    Task<SchemaLoadResult> LoadSchemaAsync(
+        string? connectionString, DbDialect? dialect, bool force, CancellationToken ct = default);
 }

@@ -47,6 +47,17 @@ public sealed class ChatController : Controller
         return Json(result, JsonOpts);
     }
 
+    /// <summary>
+    /// Introspect + cache the full schema for a data source. Called on Save (to
+    /// read the structure once) and by the refresh-schema button (force=true).
+    /// </summary>
+    [HttpPost]
+    public async Task<IActionResult> LoadSchema([FromBody] LoadSchemaDto dto, CancellationToken ct)
+    {
+        var result = await _agent.LoadSchemaAsync(dto.ConnectionString, dto.Dialect, dto.Force, ct);
+        return Json(result, JsonOpts);
+    }
+
     /// <summary>Validate a runtime connection string before it is applied (Save flow).</summary>
     [HttpPost]
     public async Task<IActionResult> TestConnection([FromBody] TestConnectionDto dto, CancellationToken ct)

@@ -17,6 +17,7 @@ public sealed class QueryAgentService : IQueryAgentService
     private const int MaxRetries = 1; // one self-correction attempt on DB error
 
     private readonly ISchemaIntrospector _introspector;
+    private readonly ISchemaCache _schemaCache;
     private readonly IAiProviderResolver _aiResolver;
     private readonly ISqlSafetyValidator _validator;
     private readonly ISqlExecutor _executor;
@@ -29,6 +30,7 @@ public sealed class QueryAgentService : IQueryAgentService
 
     public QueryAgentService(
         ISchemaIntrospector introspector,
+        ISchemaCache schemaCache,
         IAiProviderResolver aiResolver,
         ISqlSafetyValidator validator,
         ISqlExecutor executor,
@@ -40,6 +42,7 @@ public sealed class QueryAgentService : IQueryAgentService
         ILogger<QueryAgentService> log)
     {
         _introspector = introspector;
+        _schemaCache = schemaCache;
         _aiResolver = aiResolver;
         _validator = validator;
         _executor = executor;
@@ -49,6 +52,48 @@ public sealed class QueryAgentService : IQueryAgentService
         _ollama = ollama.Value;
         _groq = groq.Value;
         _log = log;
+    }
+
+    /// <summary>Return the cached schema if present, otherwise introspect live and cache it.</summary>
+    private async Task<DatabaseSchema> GetSchemaAsync(string conn, DbDialect dialect, CancellationToken ct)
+    {
+        if (_schemaCache.TryGet(conn, dialect, out var cached))
+            return cached;
+        var schema = await _introspector.IntrospectAsync(conn, dialect, ct);
+        _schemaCache.Set(conn, dialect, schema);
+        return schema;
+    }
+
+    /// <summary>Resolve the effective connection + dialect (demo DB when none given).</summary>
+    private (string conn, DbDialect dialect) ResolveSource(string? connectionString, DbDialect? dialect)
+    {
+        var conn = string.IsNullOrWhiteSpace(connectionString)
+            ? _agent.DefaultConnectionString : connectionString!;
+        var d = string.IsNullOrWhiteSpace(connectionString)
+            ? _agent.DefaultDialect : dialect ?? _agent.DefaultDialect;
+        return (conn, d);
+    }
+
+    public async Task<SchemaLoadResult> LoadSchemaAsync(
+        string? connectionString, DbDialect? dialect, bool force, CancellationToken ct = default)
+    {
+        var (conn, d) = ResolveSource(connectionString, dialect);
+        try
+        {
+            if (force) _schemaCache.Invalidate(conn, d);
+            var schema = await GetSchemaAsync(conn, d, ct);
+            return new SchemaLoadResult
+            {
+                Success = true,
+                TableCount = schema.Tables.Count,
+                ColumnCount = schema.Tables.Sum(t => t.Columns.Count)
+            };
+        }
+        catch (Exception ex)
+        {
+            _log.LogWarning(ex, "Schema load failed");
+            return new SchemaLoadResult { Success = false, Error = ex.Message };
+        }
     }
 
     private (string conn, DbDialect dialect, IAiProvider ai, string model) Resolve(AskRequest req)
@@ -73,7 +118,7 @@ public sealed class QueryAgentService : IQueryAgentService
         try
         {
             var dialect = _dialects.Get(dialectId);
-            var schema = await _introspector.IntrospectAsync(conn, dialectId, ct);
+            var schema = await GetSchemaAsync(conn, dialectId, ct);
 
             var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, _agent.MaxRows, request.History);
             var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
@@ -121,7 +166,7 @@ public sealed class QueryAgentService : IQueryAgentService
         // Introspect schema.
         yield return Status("Reading database schema...");
         DatabaseSchema? schema = null;
-        stepError = await TryStepAsync(async () => schema = await _introspector.IntrospectAsync(conn, dialectId, ct));
+        stepError = await TryStepAsync(async () => schema = await GetSchemaAsync(conn, dialectId, ct));
         if (stepError is not null) { yield return Err($"Could not connect / read schema: {stepError}"); yield break; }
 
         // Generate -> validate -> execute, retrying once if the DB rejects the

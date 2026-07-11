@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.AddSingleton<DbConnectionFactory>();
         services.AddScoped<ISchemaIntrospector, SchemaIntrospector>();
         services.AddScoped<ISqlExecutor, SqlExecutor>();
+        services.AddSingleton<ISchemaCache, SchemaCache>();
 
         // AI providers (Semantic Kernel). Model is chosen per request; the
         // resolver picks Ollama (local) or Groq (cloud) per request.

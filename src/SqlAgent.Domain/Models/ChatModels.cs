@@ -40,6 +40,15 @@ public sealed class AskResult
     public string? ModelUsed { get; init; }
 }
 
+/// <summary>Summary returned after (re)loading a data source's schema.</summary>
+public sealed class SchemaLoadResult
+{
+    public bool Success { get; init; }
+    public int TableCount { get; init; }
+    public int ColumnCount { get; init; }
+    public string? Error { get; init; }
+}
+
 /// <summary>A streamed chunk sent over SSE while answering.</summary>
 public sealed class StreamChunk
 {

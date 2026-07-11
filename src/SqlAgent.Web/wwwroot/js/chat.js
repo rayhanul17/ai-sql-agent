@@ -19,6 +19,7 @@ const els = {
     settingsReset: $('settingsReset'), settingsError: $('settingsError'),
     themeToggle: $('themeToggle'), pageMask: $('pageMask'), maskText: $('maskText'),
     activeModelBadge: $('activeModelBadge'), activeSourceBadge: $('activeSourceBadge'),
+    refreshSchemaBtn: $('refreshSchemaBtn'), schemaStatus: $('schemaStatus'),
 };
 
 const sqlModal = new bootstrap.Modal($('sqlModal'));
@@ -162,6 +163,26 @@ els.settingsReset.addEventListener('click', () => {
 document.querySelectorAll('input[name="theme"]').forEach(r =>
     r.addEventListener('change', () => applyTheme(readDraft().theme)));
 
+// Refresh schema: force re-introspect the source currently in the panel.
+els.refreshSchemaBtn.addEventListener('click', async () => {
+    const draft = readDraft();
+    els.schemaStatus.textContent = 'Reading schema…';
+    const body = draft.dialect === ''
+        ? { force: true }
+        : { connectionString: draft.connStr, dialect: Number(draft.dialect), force: true };
+    try {
+        const r = await fetch('/Chat/LoadSchema', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        }).then(x => x.json());
+        els.schemaStatus.textContent = r.success
+            ? `Schema loaded: ${r.tableCount} tables, ${r.columnCount} columns.`
+            : `Failed: ${r.error}`;
+    } catch (e) {
+        els.schemaStatus.textContent = `Failed: ${e.message}`;
+    }
+});
+
 // SAVE: validate model + connection, then apply with a full-page mask.
 els.settingsSave.addEventListener('click', async () => {
     const draft = readDraft();
@@ -179,6 +200,17 @@ els.settingsSave.addEventListener('click', async () => {
             }).then(r => r.json());
             if (!test.ok) throw new Error(test.error || 'Database connection failed.');
         }
+
+        // 1b) Read + cache the full DB structure once (force re-read on Save).
+        showMask('Reading database schema…');
+        const schemaBody = draft.dialect === ''
+            ? { force: true }
+            : { connectionString: draft.connStr, dialect: Number(draft.dialect), force: true };
+        const schema = await fetch('/Chat/LoadSchema', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(schemaBody),
+        }).then(r => r.json());
+        if (!schema.success) throw new Error(schema.error || 'Could not read database schema.');
 
         // 2) Warm up the model. For Ollama this is a cold RAM load; for Groq
         //    (cloud) the backend returns success instantly.
