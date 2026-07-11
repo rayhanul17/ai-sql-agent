@@ -12,6 +12,7 @@ services:
   postgres:
     image: postgres:16
     container_name: agent-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: agentdb
       POSTGRES_USER: agent_owner
@@ -32,6 +33,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: agent-ollama
+    restart: unless-stopped
     ports:
       - "11434:11434"
     volumes:

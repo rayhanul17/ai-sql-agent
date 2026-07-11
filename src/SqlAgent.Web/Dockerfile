@@ -22,8 +22,9 @@ RUN dotnet publish src/SqlAgent.Web/SqlAgent.Web.csproj -c Release -o /app /p:Us
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
-# tzdata lets the TZ env var (e.g. Asia/Dhaka) take effect for log timestamps.
-RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
+# tzdata: makes the TZ env var (Asia/Dhaka) apply to log timestamps.
+# curl: used by the compose healthcheck to detect a hung app.
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app ./

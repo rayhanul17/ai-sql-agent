@@ -13,6 +13,7 @@ services:
   postgres:
     image: postgres:16
     container_name: agent-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: agentdb
       POSTGRES_USER: agent_owner
@@ -33,6 +34,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: agent-ollama
+    restart: unless-stopped
     volumes:
       - agent_ollama:/root/.ollama
     healthcheck:
@@ -74,6 +76,9 @@ services:
       context: .
       dockerfile: src/SqlAgent.Web/Dockerfile
     container_name: agent-app
+    # Auto-recover: Docker restarts the app if it crashes or the healthcheck
+    # below reports it as unhealthy (e.g. it hangs and stops responding).
+    restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
@@ -81,6 +86,12 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       # Log/timestamps in Bangladesh time (containers default to UTC).

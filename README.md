@@ -250,6 +250,29 @@ docker cp agent-app:/app/Logs ./container-logs   # copy the folder to the host
 
 ---
 
+## Managing the stack
+
+The containers are set to `restart: unless-stopped`, and the app has a
+healthcheck — so if it crashes or hangs, **Docker restarts it automatically**.
+You rarely need to intervene, but the common commands are:
+
+```bash
+COMPOSE="docker compose -f docker-compose.full.yml"
+
+$COMPOSE ps                 # container status (healthy/unhealthy)
+$COMPOSE restart app        # restart just the app (keeps data)
+$COMPOSE restart            # restart everything
+$COMPOSE down               # stop all (data kept in volumes)
+$COMPOSE up --build         # rebuild + start (after pulling new code)
+$COMPOSE down -v            # stop AND wipe data (re-seeds DB, re-pulls model)
+```
+
+If a page ever loads blank, check `$COMPOSE ps` — the app may be restarting or
+still waiting on Ollama's first model pull. `docker logs --tail 40 agent-app`
+shows why.
+
+---
+
 ## LLM providers (Ollama + optional Groq)
 
 The app talks to LLMs through an `IAiProvider` abstraction, resolved per
