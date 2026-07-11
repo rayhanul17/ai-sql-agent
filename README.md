@@ -82,22 +82,53 @@ docker-compose.yml          PostgreSQL (seeded) — Ollama runs natively
 
 ## Getting started
 
-### Prerequisites
-- [.NET 10 SDK](https://dotnet.microsoft.com/)
-- [Docker Desktop](https://www.docker.com/)
+There are two ways to run it. **Path B needs only Docker** — no .NET SDK,
+no Visual Studio (the app is built inside a container). Path A is for
+development, where you run the app yourself and iterate quickly.
 
-### Two ways to run
+### Path B — All-in-one Docker (recommended for reviewers) 🐳
 
-**A) Development** — infra in Docker, app runs natively (fast to iterate):
+Everything runs in containers: PostgreSQL, Ollama (+ model), and the app.
+
+**Requires only [Docker Desktop](https://www.docker.com/).** No .NET SDK — the
+Dockerfile is multi-stage and builds the app with the .NET 10 SDK *inside*
+the build container, then ships a slim runtime image.
 
 ```bash
-# Starts PostgreSQL (seeded) + Ollama, and auto-pulls the default 3B model
-# (~2 GB). First run downloads it — give it a moment.
+# 1. (Optional) enable the Groq cloud provider:
+cp .env.example .env          # then put your key in .env: GROQ_API_KEY=gsk_...
+#    Skip this to run with local Ollama only.
+
+# 2. Build + start the whole stack (pulls the 3B model, ~2 GB):
+docker compose -f docker-compose.full.yml up --build
+
+# 3. Open http://localhost:8080
+```
+
+First run downloads the .NET SDK image and the 3B model, so give it a few
+minutes. **The default stack pulls only the 3B model** — safe for machines
+with limited disk/RAM/network. To also pull the larger 7B model (~4.5 GB):
+
+```bash
+docker compose -f docker-compose.full.yml --profile full up --build
+```
+
+### Path A — Development (app runs natively)
+
+Infra in Docker, app run by you — fastest to iterate on the code.
+
+**Requires [Docker Desktop](https://www.docker.com/) + [.NET 10 SDK](https://dotnet.microsoft.com/)**
+(you run the app with `dotnet run`).
+
+```bash
+# Start PostgreSQL (seeded) + Ollama, pulling the default 3B model (~2 GB):
 docker compose up -d
 
-# Optional: also pull the larger 7B model (~4.5 GB). Skip this on slow
-# networks / low disk — the app runs fine on 3B alone.
+# Optional — also pull the 7B model (~4.5 GB); skip on slow net / low disk:
 docker compose --profile full up -d
+
+# For Groq, put your key in appsettings.Development.json (gitignored):
+#   { "Groq": { "ApiKey": "gsk_..." } }   (see the .template file)
 
 # Run the web app:
 dotnet run --project src/SqlAgent.Web
@@ -105,25 +136,13 @@ dotnet run --project src/SqlAgent.Web
 
 `docker compose up` creates `agentdb`, seeds the demo schema (students,
 teachers, attendance, fees, leaves) and a read-only role `agent_readonly`.
-Only pulled models appear (enabled) in the UI dropdown; 3B is the default. The
-7B option shows as "not pulled" until you run the `--profile full` command
-(or `docker exec agent-ollama ollama pull qwen2.5-coder:7b`).
+Only pulled models are enabled in the UI dropdown; the 7B option shows as
+"not pulled" until you run the `--profile full` command (or
+`docker exec agent-ollama ollama pull qwen2.5-coder:7b`).
 
-> PostgreSQL is published on host port **5433** (to avoid a local 5432
-> already in use). The app's default connection string points at 5433.
-
-**B) All-in-one (final test / production)** — everything, including the app,
-in containers:
-
-```bash
-# Default: postgres + ollama + 3B model + app
-docker compose -f docker-compose.full.yml up --build
-
-# With the 7B model too:
-docker compose -f docker-compose.full.yml --profile full up --build
-```
-Then open the app's mapped port. (Requires enough RAM to hold the model —
-3B is the safe default.)
+> In development, PostgreSQL is published on host port **5433** (to avoid a
+> local 5432 already in use); the app's default connection string points at
+> 5433. In the all-in-one stack the app reaches Postgres by service name.
 
 ---
 
@@ -152,13 +171,22 @@ local model is too slow.
 
 ### Enabling Groq
 
-1. Get a free API key at <https://console.groq.com/keys> (no card required).
-2. Put it in `src/SqlAgent.Web/appsettings.Development.json` (gitignored):
-   ```json
-   { "Groq": { "ApiKey": "gsk_your_key_here" } }
-   ```
-   A `.template` file shows the shape. Never commit the real key.
-3. Restart the app — Groq models become selectable in the settings panel.
+Get a free API key at <https://console.groq.com/keys> (no card required), then
+provide it depending on how you run the app — both locations are gitignored:
+
+- **All-in-one Docker (Path B):** put it in `.env` at the repo root:
+  ```
+  GROQ_API_KEY=gsk_your_key_here
+  ```
+  (`.env.example` shows the shape.) Compose passes it to the app as `Groq__ApiKey`.
+- **Development (Path A):** put it in `src/SqlAgent.Web/appsettings.Development.json`:
+  ```json
+  { "Groq": { "ApiKey": "gsk_your_key_here" } }
+  ```
+  (a `.template` file shows the shape.)
+
+Never commit the real key. Restart the app — Groq models then become
+selectable in the settings panel. Leave it empty to run with Ollama only.
 
 ## Model strategy
 

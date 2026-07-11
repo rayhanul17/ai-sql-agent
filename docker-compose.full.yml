@@ -86,6 +86,9 @@ services:
       # Point the app at the compose service names.
       Ollama__BaseUrl: "http://ollama:11434"
       Agent__DefaultConnectionString: "Host=postgres;Port=5432;Database=agentdb;Username=agent_readonly;Password=readonly_pass"
+      # Optional Groq cloud key, read from a local .env file (see .env.example).
+      # Leave GROQ_API_KEY unset to run with Ollama only.
+      Groq__ApiKey: "${GROQ_API_KEY:-}"
 
 volumes:
   agent_pgdata:
