@@ -147,13 +147,20 @@ const CONN_TEMPLATES = {
     '2': 'Server=localhost,1433;Database=DB_NAME;User ID=sa;Password=PASSWORD;TrustServerCertificate=True',
 };
 
+const ALL_TEMPLATES = Object.values(CONN_TEMPLATES);
+
 els.dialectSelect.addEventListener('change', () => {
     const v = els.dialectSelect.value;
     els.connStr.disabled = v === '';
     if (v === '') {
         els.connStr.value = '';
-    } else if (!els.connStr.value.trim()) {
-        // Only prefill when empty, so we don't overwrite an edited string.
+        return;
+    }
+    // Prefill the template for the chosen dialect. Overwrite when the box is
+    // empty OR still holds an untouched template (so switching dialects always
+    // shows the right one); keep the user's own edits.
+    const current = els.connStr.value.trim();
+    if (current === '' || ALL_TEMPLATES.includes(current)) {
         els.connStr.value = CONN_TEMPLATES[v] || '';
     }
 });
