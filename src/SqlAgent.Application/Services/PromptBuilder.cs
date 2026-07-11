@@ -47,9 +47,13 @@ public sealed class PromptBuilder
             {schemaText}
             {historyText}
             Rules — follow ALL strictly:
-            - If the message is NOT a request for data from this database
-              (e.g. a greeting like "hi", small talk, thanks, or an unrelated
-              question), respond with exactly the single token NO_QUERY and nothing else.
+            - Only reply with the single token NO_QUERY (nothing else) if the
+              message is PURELY a greeting or small talk with no data intent
+              (e.g. "hi", "hello", "thanks", "how are you").
+            - Questions ABOUT the database itself ARE data questions — answer them
+              with SQL. This includes "what tables are there", "how many rows in
+              each table", "list the columns", "describe the schema", counts, etc.
+              (e.g. use SELECT COUNT(*) per table, or query information_schema).
             - Otherwise, generate exactly ONE read-only SELECT statement.
             - NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT or any write/DDL.
             - NEVER invent tables or columns that are not in the schema above.
