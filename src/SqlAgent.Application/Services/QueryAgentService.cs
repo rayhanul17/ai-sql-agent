@@ -124,6 +124,19 @@ public sealed class QueryAgentService : IQueryAgentService
             var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
             _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
 
+            if (IsNoQuery(rawSql))
+            {
+                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, request.History);
+                var reply = string.Empty;
+                await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
+                    reply += tok;
+                return new AskResult
+                {
+                    Question = request.Question, Success = true,
+                    Explanation = reply, ModelUsed = model
+                };
+            }
+
             var validation = _validator.Validate(rawSql, dialect, _agent.MaxRows);
             if (!validation.IsValid)
                 return Fail(request.Question, model, $"Rejected unsafe SQL: {validation.Reason}", rawSql);
@@ -192,6 +205,17 @@ public sealed class QueryAgentService : IQueryAgentService
             });
             if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
 
+            // Not a data request (greeting / small talk) -> answer conversationally.
+            if (IsNoQuery(rawSql))
+            {
+                yield return Status("Explaining result...");
+                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, request.History);
+                await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
+                    yield return new StreamChunk { Type = "token", Content = tok };
+                yield return new StreamChunk { Type = "done", Content = model };
+                yield break;
+            }
+
             var validation = _validator.Validate(rawSql!, dialect!, _agent.MaxRows);
             if (!validation.IsValid) { yield return Err($"Rejected unsafe SQL: {validation.Reason}"); yield break; }
 
@@ -235,6 +259,14 @@ public sealed class QueryAgentService : IQueryAgentService
     {
         try { await action(); return null; }
         catch (Exception ex) { return ex.Message; }
+    }
+
+    // True when the model signalled the input isn't a data request.
+    private static bool IsNoQuery(string? rawSql)
+    {
+        if (string.IsNullOrWhiteSpace(rawSql)) return true;
+        var cleaned = rawSql.Trim().Trim('`', '"', '\'', '.', ' ', '\r', '\n');
+        return cleaned.Contains("NO_QUERY", StringComparison.OrdinalIgnoreCase);
     }
 
     private static StreamChunk Status(string s) => new() { Type = "status", Content = s };

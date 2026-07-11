@@ -47,14 +47,17 @@ public sealed class PromptBuilder
             {schemaText}
             {historyText}
             Rules — follow ALL strictly:
-            - Generate exactly ONE read-only SELECT statement.
+            - If the message is NOT a request for data from this database
+              (e.g. a greeting like "hi", small talk, thanks, or an unrelated
+              question), respond with exactly the single token NO_QUERY and nothing else.
+            - Otherwise, generate exactly ONE read-only SELECT statement.
             - NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT or any write/DDL.
             - NEVER invent tables or columns that are not in the schema above.
             - {dialect.PromptSyntaxHint}
             - If the question is a follow-up (e.g. "in Bangla", "as a chart", "only males"),
               adjust the PREVIOUS query's intent rather than treating the words as data values.
             - Always limit the result to at most {maxRows} rows.
-            - Return ONLY the raw SQL. No explanation, no markdown fences, no comments.
+            - Return ONLY the raw SQL (or NO_QUERY). No explanation, no markdown fences, no comments.
 
             Question: {question}
 
@@ -97,6 +100,23 @@ public sealed class PromptBuilder
 
             Re-read the schema above and use ONLY column/table names that appear
             there. Return the corrected SQL only.
+            """;
+    }
+
+    /// <summary>
+    /// A short, friendly reply for non-data messages (greetings/small talk),
+    /// steering the user back toward asking about their database.
+    /// </summary>
+    public string BuildChatReplyPrompt(string question, IReadOnlyList<ConversationTurn>? history = null)
+    {
+        var historyText = RenderHistory(history);
+        return $"""
+            The user said: "{question}"
+            {historyText}
+            This is not a database question. Reply briefly and warmly (1-2 sentences),
+            and gently invite them to ask something about their data (for example,
+            counts, top-N, or filtered lists). Reply in the SAME language the user used.
+            Do not write any SQL.
             """;
     }
 
