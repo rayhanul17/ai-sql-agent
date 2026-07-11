@@ -12,6 +12,12 @@
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
 
+  <!-- Keep the (gitignored) Logs folder in the project structure. Serilog
+       also creates it at runtime, but this makes it explicit in the IDE. -->
+  <ItemGroup>
+    <Folder Include="Logs\" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
