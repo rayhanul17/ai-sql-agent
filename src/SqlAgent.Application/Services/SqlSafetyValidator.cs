@@ -34,11 +34,18 @@ public sealed partial class SqlSafetyValidator : ISqlSafetyValidator
         if (sql.Length == 0)
             return SqlValidationResult.Invalid("No SQL found after cleaning model output.");
 
-        // (2) Single statement only. Allow a single optional trailing semicolon.
-        var trimmed = sql.TrimEnd(';', ' ', '\r', '\n', '\t');
-        if (trimmed.Contains(';'))
-            return SqlValidationResult.Invalid("Multiple statements are not allowed.");
-        sql = trimmed;
+        // (2) Keep only the first statement. Models sometimes append a trailing
+        // ';' plus commentary/echo after the SQL; taking everything up to the
+        // first ';' both tolerates that and stays safe — any second statement
+        // (e.g. "...; DROP ...") is discarded and never executed. A single
+        // UNION [ALL] SELECT is ONE statement (no ';' inside), so it passes.
+        var firstSemicolon = sql.IndexOf(';');
+        if (firstSemicolon >= 0)
+            sql = sql[..firstSemicolon];
+        sql = sql.Trim();
+
+        if (sql.Length == 0)
+            return SqlValidationResult.Invalid("No SQL statement found.");
 
         // (3) Must be a read-only SELECT (optionally a CTE: WITH ... SELECT).
         var head = sql.TrimStart('(', ' ', '\r', '\n', '\t');
