@@ -91,9 +91,13 @@ docker-compose.yml          PostgreSQL (seeded) — Ollama runs natively
 **A) Development** — infra in Docker, app runs natively (fast to iterate):
 
 ```bash
-# Starts PostgreSQL (seeded) + Ollama, and auto-pulls BOTH models
-# (qwen2.5-coder:3b and :7b). First run downloads ~6 GB — give it a moment.
+# Starts PostgreSQL (seeded) + Ollama, and auto-pulls the default 3B model
+# (~2 GB). First run downloads it — give it a moment.
 docker compose up -d
+
+# Optional: also pull the larger 7B model (~4.5 GB). Skip this on slow
+# networks / low disk — the app runs fine on 3B alone.
+docker compose --profile full up -d
 
 # Run the web app:
 dotnet run --project src/SqlAgent.Web
@@ -101,7 +105,9 @@ dotnet run --project src/SqlAgent.Web
 
 `docker compose up` creates `agentdb`, seeds the demo schema (students,
 teachers, attendance, fees, leaves) and a read-only role `agent_readonly`.
-Only pulled models appear (enabled) in the UI dropdown; 3B is the default.
+Only pulled models appear (enabled) in the UI dropdown; 3B is the default. The
+7B option shows as "not pulled" until you run the `--profile full` command
+(or `docker exec agent-ollama ollama pull qwen2.5-coder:7b`).
 
 > PostgreSQL is published on host port **5433** (to avoid a local 5432
 > already in use). The app's default connection string points at 5433.
@@ -110,7 +116,11 @@ Only pulled models appear (enabled) in the UI dropdown; 3B is the default.
 in containers:
 
 ```bash
-docker compose -f docker-compose.full.yml up
+# Default: postgres + ollama + 3B model + app
+docker compose -f docker-compose.full.yml up --build
+
+# With the 7B model too:
+docker compose -f docker-compose.full.yml --profile full up --build
 ```
 Then open the app's mapped port. (Requires enough RAM to hold the model —
 3B is the safe default.)

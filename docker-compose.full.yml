@@ -41,7 +41,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # Pulls BOTH model tiers into the ollama volume, then exits.
+  # Pulls the DEFAULT model (3b) into the ollama volume.
   ollama-init:
     image: ollama/ollama:latest
     container_name: agent-ollama-init
@@ -51,7 +51,22 @@ services:
     environment:
       OLLAMA_HOST: http://ollama:11434
     entrypoint: >
-      sh -c "ollama pull qwen2.5-coder:3b && ollama pull qwen2.5-coder:7b"
+      sh -c "ollama pull qwen2.5-coder:3b"
+    restart: "no"
+
+  # Optional 7b model (~4.5 GB). Only under the "full" profile:
+  #   docker compose -f docker-compose.full.yml --profile full up --build
+  ollama-init-7b:
+    image: ollama/ollama:latest
+    container_name: agent-ollama-init-7b
+    profiles: ["full"]
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: >
+      sh -c "ollama pull qwen2.5-coder:7b"
     restart: "no"
 
   app:
