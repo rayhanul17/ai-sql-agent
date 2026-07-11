@@ -60,7 +60,10 @@ public sealed class QueryAgentService : IQueryAgentService
         if (_schemaCache.TryGet(conn, dialect, out var cached))
             return cached;
         var schema = await _introspector.IntrospectAsync(conn, dialect, ct);
-        _schemaCache.Set(conn, dialect, schema);
+        // Don't cache an empty/garbage introspection (e.g. a mismatched driver
+        // that "opened" but read nothing) — it would poison later queries.
+        if (schema.Tables.Count > 0)
+            _schemaCache.Set(conn, dialect, schema);
         return schema;
     }
 

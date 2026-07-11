@@ -140,6 +140,7 @@ function syncDraftToPanel() {
     if (applied.model) els.modelSelect.value = applied.model;
     els.dialectSelect.value = applied.dialect;
     els.connStr.value = applied.connStr;
+    els.connStr.dataset.forDialect = applied.dialect;
     els.connStr.disabled = applied.dialect === '';
     updateConnRequired();
 }
@@ -191,17 +192,21 @@ els.dialectSelect.addEventListener('change', () => {
         return;
     }
     // Prefill the template for the chosen dialect. Overwrite when the box is
-    // empty OR still holds an untouched template (so switching dialects always
-    // shows the right one); keep the user's own edits.
+    // empty, holds an untouched template, OR still carries a value meant for a
+    // DIFFERENT dialect (stale after a failed Save) — so switching dialects
+    // never silently reuses the previous dialect's connection string.
     const current = els.connStr.value.trim();
-    if (current === '' || ALL_TEMPLATES.includes(current)) {
+    if (current === '' || ALL_TEMPLATES.includes(current) || els.connStr.dataset.forDialect !== v) {
         els.connStr.value = CONN_TEMPLATES[v] || '';
     }
+    els.connStr.dataset.forDialect = v;
     updateConnRequired();
 });
 
-// Clear the error as soon as the user types something.
+// Clear the error as soon as the user types something; the current text is now
+// intended for the currently-selected dialect.
 els.connStr.addEventListener('input', () => {
+    els.connStr.dataset.forDialect = els.dialectSelect.value;
     if (els.connStr.value.trim()) clearConnError();
 });
 
