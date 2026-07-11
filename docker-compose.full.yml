@@ -83,6 +83,8 @@ services:
         condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+      # Log/timestamps in Bangladesh time (containers default to UTC).
+      TZ: "Asia/Dhaka"
       # Point the app at the compose service names.
       Ollama__BaseUrl: "http://ollama:11434"
       Agent__DefaultConnectionString: "Host=postgres;Port=5432;Database=agentdb;Username=agent_readonly;Password=readonly_pass"

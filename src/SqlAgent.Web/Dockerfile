@@ -21,6 +21,11 @@ RUN dotnet publish src/SqlAgent.Web/SqlAgent.Web.csproj -c Release -o /app /p:Us
 # ---- Runtime image ----
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
+
+# tzdata lets the TZ env var (e.g. Asia/Dhaka) take effect for log timestamps.
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=build /app ./
 
 ENV ASPNETCORE_URLS=http://+:8080
