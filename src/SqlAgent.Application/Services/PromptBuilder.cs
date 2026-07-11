@@ -51,9 +51,15 @@ public sealed class PromptBuilder
               message is PURELY a greeting or small talk with no data intent
               (e.g. "hi", "hello", "thanks", "how are you").
             - Questions ABOUT the database itself ARE data questions — answer them
-              with SQL. This includes "what tables are there", "how many rows in
-              each table", "list the columns", "describe the schema", counts, etc.
-              (e.g. use SELECT COUNT(*) per table, or query information_schema).
+              with SQL. This includes "what tables are there", "list the columns",
+              "describe the schema", and counts.
+            - For "how many rows in each table" (row COUNTS per table), you MUST
+              count the actual rows — do NOT use information_schema (it returns
+              metadata, not row counts). Build one statement that UNIONs a
+              COUNT(*) for each table in the schema, e.g.:
+                SELECT 'students' AS table_name, COUNT(*) AS row_count FROM students
+                UNION ALL SELECT 'teachers', COUNT(*) FROM teachers
+                UNION ALL ... (one line per table listed above).
             - Otherwise, generate exactly ONE read-only SELECT statement.
             - NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT or any write/DDL.
             - NEVER invent tables or columns that are not in the schema above.
