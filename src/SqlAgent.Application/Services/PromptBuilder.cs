@@ -63,7 +63,9 @@ public sealed class PromptBuilder
             - {dialect.PromptSyntaxHint}
             - For a follow-up like "in Bangla" / "as a chart" / "only males", adjust
               the previous query rather than treating those words as data values.
-            - Add a LIMIT only if the user explicitly asks for one (e.g. "top 5").
+            - Return ALL matching rows. Do NOT add LIMIT/TOP unless the user
+              explicitly asks to limit the count (e.g. "top 5", "first 10").
+              For "all customers" / "list students", return every row (no LIMIT).
             - Return ONLY the raw SQL (or NO_QUERY) — no markdown, no comments.
 
             Question: {question}

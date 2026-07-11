@@ -103,8 +103,9 @@ html, body {
 .empty-state i { font-size: 52px; color: var(--accent); opacity: .8; }
 .empty-state h5 { margin-top: 14px; color: var(--text); }
 
-/* Center the conversation column for readability on wide screens. */
-.msg { display: flex; gap: 12px; width: 100%; max-width: 920px; margin: 0 auto; }
+/* Wide conversation column so result tables get room; text inside stays
+   readable via its own max-width (see .answer / .status-line below). */
+.msg { display: flex; gap: 12px; width: 100%; max-width: 1400px; margin: 0 auto; }
 .msg-avatar {
     width: 34px; height: 34px; flex-shrink: 0;
     border-radius: 9px; display: grid; place-items: center; font-size: 16px;
@@ -114,6 +115,8 @@ html, body {
 .msg.bot .msg-avatar { background: rgba(139, 92, 246, .15); color: var(--accent-2); }
 
 .msg-body { min-width: 0; }
+/* Bot messages take the full column width so result tables get room. */
+.msg.bot .msg-body { flex: 1; }
 .msg.user .bubble {
     background: var(--user-bubble); color: #fff;
     padding: 10px 16px; border-radius: var(--radius); display: inline-block;
@@ -125,7 +128,10 @@ html, body {
 
 .status-line { font-size: .82rem; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
 
-/* Result table */
+/* Keep prose readable even though the bubble is wide (for tables). */
+.msg.bot .answer, .msg.bot .status-line, .msg.bot .result-meta { max-width: 880px; }
+
+/* Result table — free to use the full bubble width. */
 .result-wrap { overflow-x: auto; margin: 12px 0; border-radius: 10px; border: 1px solid var(--border); }
 table.result { width: 100%; border-collapse: collapse; font-size: .84rem; }
 table.result th {
