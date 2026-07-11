@@ -43,6 +43,9 @@ public sealed class ChatController : Controller
     [HttpPost]
     public async Task<IActionResult> Warmup([FromBody] string model, CancellationToken ct)
     {
+        // Logged here (on Save) rather than per query, so the log shows when the
+        // active model actually changed.
+        _log.LogInformation("Settings applied: model set to {Model}", model);
         var result = await _models.WarmUpAsync(model, ct);
         return Json(result, JsonOpts);
     }
@@ -54,9 +57,21 @@ public sealed class ChatController : Controller
     [HttpPost]
     public async Task<IActionResult> LoadSchema([FromBody] LoadSchemaDto dto, CancellationToken ct)
     {
+        // Logged on Save so the log records when the data source changed.
+        var source = string.IsNullOrWhiteSpace(dto.ConnectionString)
+            ? "demo DB (default)"
+            : $"{dto.Dialect} [{Mask(dto.ConnectionString)}]";
+        _log.LogInformation("Settings applied: data source set to {Source}", source);
+
         var result = await _agent.LoadSchemaAsync(dto.ConnectionString, dto.Dialect, dto.Force, ct);
+        _log.LogInformation("Schema loaded: success={Success} tables={Tables} columns={Columns}",
+            result.Success, result.TableCount, result.ColumnCount);
         return Json(result, JsonOpts);
     }
+
+    private static string Mask(string conn) =>
+        System.Text.RegularExpressions.Regex.Replace(
+            conn, @"(?i)(password|pwd)\s*=\s*[^;]*", "$1=***");
 
     /// <summary>Validate a runtime connection string before it is applied (Save flow).</summary>
     [HttpPost]

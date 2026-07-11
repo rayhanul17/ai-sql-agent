@@ -382,7 +382,7 @@ function actionBtn(icon, label, cls) {
 // Chartable = has a label (text) column and a numeric column, reasonable row count.
 function detectChartable(result) {
     const n = result.columns.length;
-    if (n < 2 || result.rowCount === 0 || result.rowCount > 50) return null;
+    if (n < 2 || result.rowCount === 0) return null;
     const colIsNumeric = i => result.rows.every(r => isNumeric(r[i]));
     let valueCol = -1, labelCol = -1;
     for (let i = 0; i < n; i++) {
