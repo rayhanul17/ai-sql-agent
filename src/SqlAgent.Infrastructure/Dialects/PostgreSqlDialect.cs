@@ -1,18 +1,19 @@
+using SqlAgent.Domain.Contracts;
 using SqlAgent.Domain.Models;
 
 namespace SqlAgent.Infrastructure.Dialects;
 
-public sealed class PostgreSqlDialect : LimitDialectBase
+public sealed class PostgreSqlDialect : ISqlDialect
 {
-    public override DbDialect Dialect => DbDialect.PostgreSql;
-    public override string DisplayName => "PostgreSQL";
+    public DbDialect Dialect => DbDialect.PostgreSql;
+    public string DisplayName => "PostgreSQL";
 
-    public override string PromptSyntaxHint =>
+    public string PromptSyntaxHint =>
         "Use PostgreSQL syntax. Quote identifiers with double quotes only if needed. " +
-        "Use LIMIT n to cap rows. Current time is NOW().";
+        "If the user asks for a limited number of rows, use LIMIT n. Current time is NOW().";
 
     // Returns: table_name, column_name, data_type, is_nullable, is_pk, fk_reference
-    public override string SchemaIntrospectionSql => """
+    public string SchemaIntrospectionSql => """
         SELECT
             c.table_name,
             c.column_name,

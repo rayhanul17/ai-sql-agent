@@ -1,12 +1,11 @@
-using System.Text.RegularExpressions;
 using SqlAgent.Domain.Contracts;
 using SqlAgent.Domain.Models;
 
 namespace SqlAgent.Infrastructure.Dialects;
 
 /// <summary>
-/// SQL Server (T-SQL). Differs from Postgres/MySQL: row capping uses TOP,
-/// not LIMIT. TOP is injected right after SELECT when absent.
+/// SQL Server (T-SQL). Differs from Postgres/MySQL in syntax (e.g. TOP instead
+/// of LIMIT) — the LLM is told this via <see cref="PromptSyntaxHint"/>.
 /// </summary>
 public sealed class SqlServerDialect : ISqlDialect
 {
@@ -14,27 +13,9 @@ public sealed class SqlServerDialect : ISqlDialect
     public string DisplayName => "Microsoft SQL Server (T-SQL)";
 
     public string PromptSyntaxHint =>
-        "Use T-SQL (Microsoft SQL Server) syntax. Cap rows with SELECT TOP n (there is NO LIMIT keyword). " +
+        "Use T-SQL (Microsoft SQL Server) syntax. If the user asks for a limited " +
+        "number of rows, use SELECT TOP n (there is NO LIMIT keyword). " +
         "Quote identifiers with [brackets] if needed. Current time is GETDATE().";
-
-    // TOP n / OFFSET..FETCH both count as an existing row cap.
-    private static readonly Regex TopRegex =
-        new(@"\bTOP\s*\(?\s*\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex FetchRegex =
-        new(@"\bFETCH\s+(FIRST|NEXT)\s+\d+", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-    private static readonly Regex SelectHead =
-        new(@"^\s*SELECT\s+(DISTINCT\s+)?", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-    public bool HasRowLimit(string sql) => TopRegex.IsMatch(sql) || FetchRegex.IsMatch(sql);
-
-    public string ApplyRowLimit(string sql, int maxRows)
-    {
-        if (HasRowLimit(sql)) return sql;
-        // Insert "TOP n" after the leading SELECT [DISTINCT].
-        var m = SelectHead.Match(sql);
-        if (!m.Success) return sql; // safety layer already guaranteed SELECT; be defensive.
-        return sql.Insert(m.Index + m.Length, $"TOP {maxRows} ");
-    }
 
     public string SchemaIntrospectionSql => """
         SELECT

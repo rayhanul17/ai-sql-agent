@@ -24,7 +24,7 @@ public sealed partial class SqlSafetyValidator : ISqlSafetyValidator
         "COPY", "INTO", "ATTACH", "PRAGMA", "VACUUM", "COMMIT", "ROLLBACK"
     ];
 
-    public SqlValidationResult Validate(string rawSql, ISqlDialect dialect, int maxRows)
+    public SqlValidationResult Validate(string rawSql, ISqlDialect dialect)
     {
         if (string.IsNullOrWhiteSpace(rawSql))
             return SqlValidationResult.Invalid("Empty query.");
@@ -61,10 +61,10 @@ public sealed partial class SqlSafetyValidator : ISqlSafetyValidator
                 return SqlValidationResult.Invalid($"Blocked keyword detected: {kw}.");
         }
 
-        // (5) Force a row limit if the dialect says one is missing.
-        var safe = dialect.HasRowLimit(sql) ? sql : dialect.ApplyRowLimit(sql, maxRows);
-
-        return SqlValidationResult.Valid(safe);
+        // No row-limit is forced: the full result set is returned as-is.
+        // (Safety is read-only SELECT + single statement + keyword block + a
+        //  READ ONLY transaction with a statement timeout at execution time.)
+        return SqlValidationResult.Valid(sql);
     }
 
     /// <summary>Strip reasoning blocks, code fences, "sql:" prefixes, and whitespace.</summary>

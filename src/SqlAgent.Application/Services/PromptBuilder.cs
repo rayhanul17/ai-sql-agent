@@ -35,7 +35,7 @@ public sealed class PromptBuilder
     }
 
     public string BuildSqlPrompt(
-        string question, DatabaseSchema schema, ISqlDialect dialect, int maxRows,
+        string question, DatabaseSchema schema, ISqlDialect dialect,
         IReadOnlyList<ConversationTurn>? history = null)
     {
         var schemaText = RenderSchema(schema);
@@ -52,6 +52,10 @@ public sealed class PromptBuilder
             Rules:
             - Write exactly ONE read-only SELECT for the question. Questions about
               the database itself (tables, columns, counts, rows per table) count too.
+            - For "what tables are there", do NOT use information_schema. The table
+              list is given in the schema above; return those names, e.g.
+              SELECT 'students' AS table_name UNION ALL SELECT 'teachers' ...
+              (one line per table listed above).
             - For "rows in each table", UNION a COUNT(*) per table (not information_schema).
             - Only if the message is purely a greeting/thanks with no data intent,
               reply with the single token NO_QUERY instead.
@@ -59,7 +63,7 @@ public sealed class PromptBuilder
             - {dialect.PromptSyntaxHint}
             - For a follow-up like "in Bangla" / "as a chart" / "only males", adjust
               the previous query rather than treating those words as data values.
-            - Limit results to at most {maxRows} rows.
+            - Add a LIMIT only if the user explicitly asks for one (e.g. "top 5").
             - Return ONLY the raw SQL (or NO_QUERY) — no markdown, no comments.
 
             Question: {question}
@@ -88,10 +92,10 @@ public sealed class PromptBuilder
     /// exactly what went wrong so it can self-correct (e.g. a wrong column).
     /// </summary>
     public string BuildRetryPrompt(
-        string question, DatabaseSchema schema, ISqlDialect dialect, int maxRows,
+        string question, DatabaseSchema schema, ISqlDialect dialect,
         string failedSql, string dbError, IReadOnlyList<ConversationTurn>? history = null)
     {
-        var basePrompt = BuildSqlPrompt(question, schema, dialect, maxRows, history);
+        var basePrompt = BuildSqlPrompt(question, schema, dialect, history);
         return $"""
             {basePrompt}
 

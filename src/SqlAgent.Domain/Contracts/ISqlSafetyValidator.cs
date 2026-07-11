@@ -10,5 +10,5 @@ namespace SqlAgent.Domain.Contracts;
 /// </summary>
 public interface ISqlSafetyValidator
 {
-    SqlValidationResult Validate(string rawSql, ISqlDialect dialect, int maxRows);
+    SqlValidationResult Validate(string rawSql, ISqlDialect dialect);
 }

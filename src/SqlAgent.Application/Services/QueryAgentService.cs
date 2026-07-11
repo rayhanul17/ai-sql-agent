@@ -120,7 +120,7 @@ public sealed class QueryAgentService : IQueryAgentService
             var dialect = _dialects.Get(dialectId);
             var schema = await GetSchemaAsync(conn, dialectId, ct);
 
-            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, _agent.MaxRows, request.History);
+            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, request.History);
             var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
             _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
 
@@ -137,7 +137,7 @@ public sealed class QueryAgentService : IQueryAgentService
                 };
             }
 
-            var validation = _validator.Validate(rawSql, dialect, _agent.MaxRows);
+            var validation = _validator.Validate(rawSql, dialect);
             if (!validation.IsValid)
                 return Fail(request.Question, model, $"Rejected unsafe SQL: {validation.Reason}", rawSql);
 
@@ -198,8 +198,8 @@ public sealed class QueryAgentService : IQueryAgentService
             stepError = await TryStepAsync(async () =>
             {
                 var prompt = isRetry
-                    ? _prompts.BuildRetryPrompt(request.Question, schema!, dialect!, _agent.MaxRows, prevSql!, lastError!, request.History)
-                    : _prompts.BuildSqlPrompt(request.Question, schema!, dialect!, _agent.MaxRows, request.History);
+                    ? _prompts.BuildRetryPrompt(request.Question, schema!, dialect!, prevSql!, lastError!, request.History)
+                    : _prompts.BuildSqlPrompt(request.Question, schema!, dialect!, request.History);
                 rawSql = await ai.GenerateSqlAsync(prompt, model, ct);
                 _log.LogInformation("Model {Model} generated SQL (attempt {Attempt}): {Sql}", model, attempt + 1, rawSql);
             });
@@ -216,7 +216,7 @@ public sealed class QueryAgentService : IQueryAgentService
                 yield break;
             }
 
-            var validation = _validator.Validate(rawSql!, dialect!, _agent.MaxRows);
+            var validation = _validator.Validate(rawSql!, dialect!);
             if (!validation.IsValid) { yield return Err($"Rejected unsafe SQL: {validation.Reason}"); yield break; }
 
             safeSql = validation.SafeSql!;

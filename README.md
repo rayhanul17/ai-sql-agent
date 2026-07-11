@@ -261,6 +261,13 @@ Most of these scale away with a larger model (7B, or the Groq cloud models):
   aggregates) work everywhere. A multi-table question like "how many rows in
   each table" (needs a `UNION ALL COUNT(*)`) is reliable on 7B / cloud; 3B
   sometimes declines it.
+- **Very wide databases.** The whole schema is sent to the model per query, so
+  a database with ~100+ tables produces a very large prompt. That can exceed a
+  cloud model's per-minute token limit (Groq free tier) or be slow on a local
+  CPU model. This app targets small-to-medium schemas (the seeded demo, or a
+  focused DB); relevant-table selection for huge schemas is future work. Runtime
+  connection strings for Postgres/MySQL/SQL Server are supported and were
+  verified to connect and introspect (e.g. a 140-table MySQL read fine).
 - **Local speed.** On a CPU-only machine, Ollama replies token-by-token but
   slowly, and switching to a larger local model has a cold-load delay. Groq
   (cloud) is near-instant — handy for demos on modest hardware.

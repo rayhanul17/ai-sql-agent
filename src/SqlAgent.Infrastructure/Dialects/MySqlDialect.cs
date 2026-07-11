@@ -1,18 +1,19 @@
+using SqlAgent.Domain.Contracts;
 using SqlAgent.Domain.Models;
 
 namespace SqlAgent.Infrastructure.Dialects;
 
-public sealed class MySqlDialect : LimitDialectBase
+public sealed class MySqlDialect : ISqlDialect
 {
-    public override DbDialect Dialect => DbDialect.MySql;
-    public override string DisplayName => "MySQL";
+    public DbDialect Dialect => DbDialect.MySql;
+    public string DisplayName => "MySQL";
 
-    public override string PromptSyntaxHint =>
+    public string PromptSyntaxHint =>
         "Use MySQL syntax. Quote identifiers with backticks if needed. " +
-        "Use LIMIT n to cap rows. Current time is NOW().";
+        "If the user asks for a limited number of rows, use LIMIT n. Current time is NOW().";
 
     // MySQL uses DATABASE() to scope to the current schema.
-    public override string SchemaIntrospectionSql => """
+    public string SchemaIntrospectionSql => """
         SELECT
             c.TABLE_NAME AS table_name,
             c.COLUMN_NAME AS column_name,

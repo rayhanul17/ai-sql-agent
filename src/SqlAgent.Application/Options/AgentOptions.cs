@@ -7,8 +7,10 @@ public sealed class AgentOptions
 {
     public const string SectionName = "Agent";
 
-    /// <summary>Max rows any generated query may return (row-limit safety).</summary>
-    public int MaxRows { get; set; } = 100;
+    // No row cap and no schema-table cap: full results and the full schema are
+    // used, so demos always show complete data. (Very large cloud prompts can
+    // hit a provider's token/rate limit — a documented provider-side limit,
+    // not something we truncate around.)
 
     /// <summary>Statement timeout for executed queries.</summary>
     public int QueryTimeoutSeconds { get; set; } = 30;
