@@ -46,28 +46,21 @@ public sealed class PromptBuilder
             Database schema (only these tables/columns exist):
             {schemaText}
             {historyText}
-            Rules — follow ALL strictly:
-            - Only reply with the single token NO_QUERY (nothing else) if the
-              message is PURELY a greeting or small talk with no data intent
-              (e.g. "hi", "hello", "thanks", "how are you").
-            - Questions ABOUT the database itself ARE data questions — answer them
-              with SQL. This includes "what tables are there", "list the columns",
-              "describe the schema", and counts.
-            - For "how many rows in each table" (row COUNTS per table), you MUST
-              count the actual rows — do NOT use information_schema (it returns
-              metadata, not row counts). Build one statement that UNIONs a
-              COUNT(*) for each table in the schema, e.g.:
-                SELECT 'students' AS table_name, COUNT(*) AS row_count FROM students
-                UNION ALL SELECT 'teachers', COUNT(*) FROM teachers
-                UNION ALL ... (one line per table listed above).
-            - Otherwise, generate exactly ONE read-only SELECT statement.
-            - NEVER use INSERT, UPDATE, DELETE, DROP, ALTER, TRUNCATE, CREATE, GRANT or any write/DDL.
-            - NEVER invent tables or columns that are not in the schema above.
+            The question may be in English, Bangla, or Banglish (Bangla written in
+            Latin letters) — understand it either way and answer it with SQL.
+
+            Rules:
+            - Write exactly ONE read-only SELECT for the question. Questions about
+              the database itself (tables, columns, counts, rows per table) count too.
+            - For "rows in each table", UNION a COUNT(*) per table (not information_schema).
+            - Only if the message is purely a greeting/thanks with no data intent,
+              reply with the single token NO_QUERY instead.
+            - Use only tables/columns from the schema above; never write to the DB.
             - {dialect.PromptSyntaxHint}
-            - If the question is a follow-up (e.g. "in Bangla", "as a chart", "only males"),
-              adjust the PREVIOUS query's intent rather than treating the words as data values.
-            - Always limit the result to at most {maxRows} rows.
-            - Return ONLY the raw SQL (or NO_QUERY). No explanation, no markdown fences, no comments.
+            - For a follow-up like "in Bangla" / "as a chart" / "only males", adjust
+              the previous query rather than treating those words as data values.
+            - Limit results to at most {maxRows} rows.
+            - Return ONLY the raw SQL (or NO_QUERY) — no markdown, no comments.
 
             Question: {question}
 
@@ -125,8 +118,8 @@ public sealed class PromptBuilder
             {historyText}
             This is not a database question. Reply briefly and warmly (1-2 sentences),
             and gently invite them to ask something about their data (for example,
-            counts, top-N, or filtered lists). Reply in the SAME language the user used.
-            Do not write any SQL.
+            counts, top-N, or filtered lists). Do not write any SQL.
+            Reply in the same language the user used.
             """;
     }
 
@@ -151,9 +144,7 @@ public sealed class PromptBuilder
             groupings, min/max). Be concise. Do not mention SQL. Do not end with a
             question. If the result is empty, say no matching records were found.
 
-            IMPORTANT: Reply in the SAME language the user used in their question
-            (or the language they most recently asked you to use — e.g. if they
-            said to answer in Bangla, answer in Bangla). Match their language.
+            Reply in the same language the user used (Bangla question -> Bangla answer).
             """;
     }
 

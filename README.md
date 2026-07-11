@@ -249,6 +249,29 @@ added later by one config line.
 
 ---
 
+## Known limitations
+
+Most of these scale away with a larger model (7B, or the Groq cloud models):
+
+- **Small-model language quality.** English works well on all models. Bangla
+  and Banglish questions are understood and answered by 7B and the cloud
+  models; the small **3B** understands them and returns the right data, but its
+  Bangla wording can be rough. For polished Bangla, use 7B or a Groq model.
+- **Hard meta-questions.** Everyday queries (counts, top-N, filters, per-group
+  aggregates) work everywhere. A multi-table question like "how many rows in
+  each table" (needs a `UNION ALL COUNT(*)`) is reliable on 7B / cloud; 3B
+  sometimes declines it.
+- **Local speed.** On a CPU-only machine, Ollama replies token-by-token but
+  slowly, and switching to a larger local model has a cold-load delay. Groq
+  (cloud) is near-instant — handy for demos on modest hardware.
+- **Syntax validation is the database's job.** The safety layer enforces
+  read-only/single-SELECT but not SQL correctness; a slightly malformed query
+  is caught by the database and then auto-retried once with the error fed back
+  to the model.
+- **Prompt kept lightweight on purpose.** Over-constraining the prompt made the
+  3B model refuse valid questions, so the instructions are deliberately concise
+  and lean on the database + retry as the safety net.
+
 ## Future improvements
 - Add a larger tier (14B) and optional cloud LLM (OpenAI/Claude) via the same `IAiProvider`.
 - Query-result caching (Redis) for repeated questions.
