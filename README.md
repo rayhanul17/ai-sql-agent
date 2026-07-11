@@ -195,6 +195,28 @@ connection string. The agent introspects that database's live schema and
 answers against it. Prefer a **read-only** connection string — the app enforces
 read-only, but a least-privileged user is the safest backstop.
 
+### Which host to use
+
+The `Server=` / `Host=` value depends on **where the app runs**, not where the
+DB runs:
+
+| App is running… | Use this host for a DB on your machine |
+|-----------------|----------------------------------------|
+| Natively (`dotnet run`) | `localhost` |
+| In a container (all-in-one Docker) | `host.docker.internal` |
+| In the same compose network as the DB | the DB's service name (e.g. `postgres`) |
+
+If the containerised app can't reach a DB via `localhost`, that's expected —
+`localhost` inside a container means the container itself. You'll see
+*"Unable to connect to any of the specified MySQL hosts"* or similar. Switch to
+`host.docker.internal` (the DB is published on a host port), or attach the DB
+container to the app's network:
+
+```bash
+docker network ls                                   # find e.g. ai-sql-agent_default
+docker network connect ai-sql-agent_default mysql   # then use Server=mysql
+```
+
 ---
 
 ## LLM providers (Ollama + optional Groq)

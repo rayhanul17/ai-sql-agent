@@ -96,6 +96,12 @@
                 <i class="bi bi-shield-lock"></i>
                 Queries run read-only. Use a read-only DB user when possible.
             </div>
+            <div class="side-hint">
+                <i class="bi bi-info-circle"></i>
+                Host tip: use <code>localhost</code> when running the app natively;
+                use <code>host.docker.internal</code> when the app runs in Docker
+                and the DB is on your host.
+            </div>
             <button id="refreshSchemaBtn" class="btn btn-sm btn-outline-secondary mt-2">
                 <i class="bi bi-arrow-repeat"></i> Refresh schema
             </button>
