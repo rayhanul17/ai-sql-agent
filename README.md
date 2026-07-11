@@ -207,6 +207,13 @@ Pick the provider (and its model) from the settings panel. Ollama stays the
 primary/default; Groq is a fast cloud fallback — handy on machines where a
 local model is too slow.
 
+> Model capability scales with size. Everyday questions (counts, top-N,
+> filters, per-group aggregates) work on all four models. A few harder
+> meta-questions — e.g. "how many rows in each table", which needs a
+> multi-table `UNION ALL COUNT(*)` — are handled by 7B and the cloud models,
+> but the small 3B may decline them. Reasoning models (Qwen3) that emit a
+> `<think>` block are handled: it's stripped from both the SQL and the answer.
+
 ### Enabling Groq
 
 Get a free API key at <https://console.groq.com/keys> (no card required), then

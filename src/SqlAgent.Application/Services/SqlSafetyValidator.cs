@@ -67,10 +67,14 @@ public sealed partial class SqlSafetyValidator : ISqlSafetyValidator
         return SqlValidationResult.Valid(safe);
     }
 
-    /// <summary>Strip ```sql fences, "sql:" prefixes, and surrounding whitespace.</summary>
+    /// <summary>Strip reasoning blocks, code fences, "sql:" prefixes, and whitespace.</summary>
     private static string Clean(string raw)
     {
         var s = raw.Trim();
+
+        // Reasoning models (e.g. Qwen3, DeepSeek-R1) emit a <think>...</think>
+        // block before the answer. Remove it so only the SQL remains.
+        s = ThinkRegex().Replace(s, string.Empty).Trim();
 
         // Remove markdown code fences ```sql ... ```
         s = FenceRegex().Replace(s, m => m.Groups["body"].Value);
@@ -80,6 +84,11 @@ public sealed partial class SqlSafetyValidator : ISqlSafetyValidator
 
         return s.Trim();
     }
+
+    // Matches a whole <think>...</think> block, and also a dangling "<think>...">
+    // with no close tag (some models get cut off before the closing tag).
+    [GeneratedRegex(@"<think>.*?(</think>|$)", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
+    private static partial Regex ThinkRegex();
 
     [GeneratedRegex(@"```(?:sql)?\s*(?<body>.*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase)]
     private static partial Regex FenceRegex();

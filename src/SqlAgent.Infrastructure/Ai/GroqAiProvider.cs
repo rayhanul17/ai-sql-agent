@@ -41,8 +41,14 @@ public sealed class GroqAiProvider : IAiProvider
         return response.Content ?? string.Empty;
     }
 
-    public async IAsyncEnumerable<string> StreamExplanationAsync(
-        string prompt, string model, [EnumeratorCancellation] CancellationToken ct = default)
+    public IAsyncEnumerable<string> StreamExplanationAsync(
+        string prompt, string model, CancellationToken ct = default)
+    {
+        return ThinkFilter.StripAsync(Raw(prompt, model, ct), ct);
+    }
+
+    private async IAsyncEnumerable<string> Raw(
+        string prompt, string model, [EnumeratorCancellation] CancellationToken ct)
     {
         var history = new ChatHistory();
         history.AddUserMessage(prompt);
