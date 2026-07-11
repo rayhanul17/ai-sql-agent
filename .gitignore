@@ -25,6 +25,7 @@ artifacts/
 
 # ---- Logs ----
 logs/
+Logs/
 *.log
 
 # ---- Local secrets / env ----

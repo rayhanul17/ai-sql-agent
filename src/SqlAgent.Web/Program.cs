@@ -6,13 +6,14 @@ using SqlAgent.Infrastructure;
 var builder = WebApplication.CreateBuilder(args);
 
 // Structured logging (also captures every generated SQL for audit).
-// Writes to the console AND a rolling daily file under the project's logs/
-// folder (next to wwwroot/Controllers) — not bin/, which gets wiped on clean.
+// Console + a daily rolling file (agent-yyyyMMdd.log) under the project's
+// Logs/ folder — not bin/, which gets wiped on clean. Serilog rolls the file
+// automatically each day.
 builder.Host.UseSerilog((ctx, cfg) => cfg
     .ReadFrom.Configuration(ctx.Configuration)
     .WriteTo.Console()
     .WriteTo.File(
-        path: Path.Combine(ctx.HostingEnvironment.ContentRootPath, "logs", "agent-.log"),
+        path: Path.Combine(ctx.HostingEnvironment.ContentRootPath, "Logs", "agent-.log"),
         rollingInterval: RollingInterval.Day,
         shared: true,
         retainedFileCountLimit: 7));
