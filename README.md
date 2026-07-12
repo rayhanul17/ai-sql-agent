@@ -6,8 +6,14 @@ streams back a plain-language answer — with the generated SQL, an HTML result
 table, an Excel export and an optional chart.
 
 Built with **.NET 10 + ASP.NET Core MVC**, **Microsoft Semantic Kernel**
-(the .NET equivalent of LangChain) and a **local LLM via Ollama**
-(`qwen2.5-coder`). No cloud, no API keys.
+(the .NET equivalent of LangChain), a **local LLM via Ollama** (`qwen2.5-coder`,
+runs offline with no API keys) and an **optional Groq cloud** provider for speed.
+
+![AI SQL Agent — natural-language question answered with a table, chart and summary](docs/demo.png)
+
+*"How many customers per country" → the agent writes the SQL, returns the full
+result as a table, offers Bar/Line/Pie charts and an Excel export, and answers in
+your language (here, Bangla) — running on MySQL via the Groq cloud model.*
 
 ---
 
