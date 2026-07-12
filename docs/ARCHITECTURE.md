@@ -76,9 +76,9 @@ questions touch the database:
 ```
         ┌──────────────────────────────────────────────────────────┐
         │  analyse → INTENT + LANGUAGE  (a message can be BOTH a      │
-        │  data query AND a language instruction). A fast regex       │
-        │  short-circuits a PURE language instruction; otherwise      │
-        │  one small LLM call returns two lines the code parses.      │
+        │  data query AND a language instruction). One small LLM call │
+        │  returns two lines the code parses — no keyword heuristics, │
+        │  so any phrasing in any language is understood.             │
         └───────────────────────┬──────────────────────────────────┘
                                 │  INTENT drives the branch;
                                 │  LANGUAGE (if any) is applied to the answer
@@ -115,12 +115,14 @@ requested reply `LANGUAGE`. The code then decides — a data query still runs, a
 the requested language is applied to the answer.
 
 `INSTRUCTION` is only for a message whose *sole* point is to set behaviour/
-language ("from now on answer in English"). Because a tiny local model can
-mistake that for a follow-up query, a deterministic regex
-(`LooksLikeLanguageInstruction`) short-circuits the *pure* case *before* the LLM
-call — but it stands down if the message also asks for data (`LooksLikeDataRequest`),
-so a double prompt is never swallowed. Anything the regex doesn't catch falls
-through to the LLM, which returns the `INTENT`/`LANGUAGE` lines.
+language ("from now on answer in English", "respond in Spanish"). Detection is
+entirely the LLM's job — the analyze prompt teaches the *principle* (a
+behaviour/language directive in any language, any phrasing, is INSTRUCTION) rather
+than a keyword list, so there are no regex heuristics to maintain or to miss an
+unusual wording. The only regex left parses the model's own `LANGUAGE:` line; it
+does not detect anything. Trade-off: the big model (Groq) is near-perfect at this,
+while the tiny 3B occasionally mislabels an unusual phrasing — the accepted cost
+of keeping detection principled and language-agnostic instead of hardcoded.
 
 ### 5. Self-correction (data path)
 
@@ -165,13 +167,15 @@ at most one SQL line) is still only a few hundred tokens, versus ~32K tokens for
 the local 3B and ~128K for the Groq model. Sending whole answers or result tables
 would balloon the prompt for no benefit — the SQL alone is what a follow-up needs.
 
-History also carries a **standing language preference**. If an earlier turn was
-"banglay bolo" / "answer in English from now on", the reply language is resolved
-in code (a small regex over the current message and history), not left to the
-model to re-derive: an explicit "answer in X" in the current message wins, else
-the standing instruction, else the question's own language. So after "banglay
-bolo", a later English question is still answered in Bangla — reliably, even on
-the 3B.
+There is also a **standing language preference** that outlives the history window.
+When the LLM labels a turn `INSTRUCTION` with a `LANGUAGE`, the server returns that
+language on the `done` chunk; the client stores it and sends it back as
+`standingLanguage` on every later request (independent of the history slice). The
+reply language is then resolved in code: an explicit "answer in X" in the current
+message wins, else this sticky standing language, else the question's own language.
+So after "banglay bolo", every later question — however many turns on — is answered
+in Bangla until the user changes it or clears the chat. The detection is the LLM's;
+the code only carries the value and applies the priority.
 
 ---
 

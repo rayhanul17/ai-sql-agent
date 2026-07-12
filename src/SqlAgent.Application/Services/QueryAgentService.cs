@@ -139,7 +139,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
             }
 
             var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, request.History);
-            var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
+            var rawSql = await GenerateWithTimeoutAsync(ai, sqlPrompt, model, ct);
             _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
 
             // Subject isn't in this schema -> answer helpfully, don't hallucinate.
@@ -210,8 +210,8 @@ public sealed partial class QueryAgentService : IQueryAgentService
         var analysis = new MessageAnalysis { Intent = QueryIntent.DataQuery };
         stepError = await TryStepAsync(async () => analysis = await AnalyzeAsync(ai, model, request, schema!, ct));
         if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
-        _log.LogInformation("Analysed: intent={Intent} language={Lang} for question: {Q}",
-            analysis.Intent, analysis.RequestedLanguage ?? "none", request.Question);
+        _log.LogInformation("Analysed: intent={Intent} language={Lang} standing={Standing} for question: {Q}",
+            analysis.Intent, analysis.RequestedLanguage ?? "none", request.StandingLanguage ?? "none", request.Question);
 
         // Non-data intents (SQL help / meta / instruction / off-topic) -> answer conversationally.
         if (analysis.Intent != QueryIntent.DataQuery)
@@ -220,11 +220,10 @@ public sealed partial class QueryAgentService : IQueryAgentService
             var chatPrompt = NonDataPrompt(analysis.Intent, request, schema!);
             await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
                 yield return new StreamChunk { Type = "token", Content = tok };
-            // If this was a language instruction, tell the client which language so
-            // it can make the preference sticky for the rest of the session.
-            var setLang = analysis.Intent == QueryIntent.Instruction
-                ? (analysis.RequestedLanguage ?? ExtractLanguage(request.Question))
-                : null;
+            // If this was a language instruction, tell the client which language
+            // (from the LLM's analysis) so it can make the preference sticky for the
+            // rest of the session.
+            var setLang = analysis.Intent == QueryIntent.Instruction ? analysis.RequestedLanguage : null;
             yield return new StreamChunk { Type = "done", Content = model, Data = setLang is null ? null : new { setLanguage = setLang } };
             yield break;
         }
@@ -247,7 +246,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
                 var prompt = isRetry
                     ? _prompts.BuildRetryPrompt(request.Question, schema!, dialect!, prevSql!, lastError!, request.History)
                     : _prompts.BuildSqlPrompt(request.Question, schema!, dialect!, request.History);
-                rawSql = await ai.GenerateSqlAsync(prompt, model, ct);
+                rawSql = await GenerateWithTimeoutAsync(ai, prompt, model, ct);
                 _log.LogInformation("Model {Model} generated SQL (attempt {Attempt}): {Sql}", model, attempt + 1, rawSql);
             });
             if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
@@ -334,27 +333,37 @@ public sealed partial class QueryAgentService : IQueryAgentService
     private async Task<MessageAnalysis> AnalyzeAsync(
         IAiProvider ai, string model, AskRequest request, DatabaseSchema schema, CancellationToken ct)
     {
-        // Fast, deterministic short-circuit for a PURE language instruction ("from
-        // now on answer in English", "banglay bolo") — a tiny model sometimes
-        // mistakes these for a follow-up query when a prior query is in history.
-        // Only short-circuit when the message carries NO data request, so a
-        // combined "how many tables, in Bangla" still goes to the LLM (and stays a
-        // data query). Reliable and one LLM call cheaper for the pure case.
-        if (LooksLikeLanguageInstruction(request.Question) && !LooksLikeDataRequest(request.Question))
-            return new MessageAnalysis
-            {
-                Intent = QueryIntent.Instruction,
-                RequestedLanguage = ExtractLanguage(request.Question),
-            };
-
+        // Detection is entirely the LLM's job: the analyze prompt returns INTENT +
+        // LANGUAGE, and we trust those. No keyword/regex heuristics — so any phrasing
+        // in any language ("banglay bolo", "respond in Spanish", …) is understood.
         var prompt = _prompts.BuildAnalyzePrompt(request.Question, schema, request.History);
-        var raw = await ai.GenerateSqlAsync(prompt, model, ct);
+        var raw = await GenerateWithTimeoutAsync(ai, prompt, model, ct);
         return ParseAnalysis(raw);
     }
 
+    // Call the model with a timeout so a hung/throttled provider (e.g. a Groq
+    // rate-limit that never returns) fails fast with a clear message instead of
+    // leaving the request pending forever. Distinguishes our timeout from a real
+    // client cancel (which the caller's ct carries).
+    private async Task<string> GenerateWithTimeoutAsync(
+        IAiProvider ai, string prompt, string model, CancellationToken ct)
+    {
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(_agent.LlmTimeoutSeconds));
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        try
+        {
+            return await ai.GenerateSqlAsync(prompt, model, linked.Token);
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"The model did not respond within {_agent.LlmTimeoutSeconds}s. The provider may be rate-limited or unavailable — try again, or switch model/provider.");
+        }
+    }
+
     // Parse the two-line "INTENT: x / LANGUAGE: y" analysis. Robust to extra text:
-    // intent is matched anywhere (last-line wins), language is read from a
-    // LANGUAGE: line if present. Missing/garbled -> DataQuery, no language.
+    // intent is matched anywhere (last-line wins); LANGUAGE is read from its line as
+    // a free language name ("none" -> null). Missing/garbled -> DataQuery, no language.
     private static MessageAnalysis ParseAnalysis(string? raw)
     {
         var intent = ParseIntent(raw);
@@ -365,83 +374,26 @@ public sealed partial class QueryAgentService : IQueryAgentService
             if (m.Success)
             {
                 var lang = m.Groups["lang"].Value.Trim().ToLowerInvariant();
-                if (lang is "english" or "bangla" or "banglish" or "bengali")
+                if (lang.Length > 0 && lang != "none")
                     language = lang == "bengali" ? "bangla" : lang;
             }
         }
         return new MessageAnalysis { Intent = intent, RequestedLanguage = language };
     }
 
-    // The language explicitly requested in THIS message. Prefer the analysis
-    // result, but fall back to the regex when a tiny model missed an obvious
-    // "answer in X" — so an explicit request reliably overrides a standing one.
-    private static string? EffectiveRequestedLanguage(AskRequest request, MessageAnalysis analysis)
-    {
-        if (!string.IsNullOrWhiteSpace(analysis.RequestedLanguage))
-            return analysis.RequestedLanguage;
-        return LooksLikeLanguageInstruction(request.Question)
-            ? ExtractLanguage(request.Question)
-            : null;
-    }
+    // The language explicitly requested in THIS message — straight from the LLM's
+    // analysis, no fallback heuristics.
+    private static string? EffectiveRequestedLanguage(AskRequest request, MessageAnalysis analysis) =>
+        analysis.RequestedLanguage;
 
-    // The effective standing reply-language: prefer the sticky preference the
-    // client carries for the whole session (survives the history window), then
-    // fall back to scanning the recent history for a language instruction (covers
-    // the first turn after it's set, before the client has echoed it back).
-    private static string? StandingLanguage(AskRequest request)
-    {
-        if (!string.IsNullOrWhiteSpace(request.StandingLanguage))
-            return request.StandingLanguage;
-        var history = request.History;
-        for (var i = history.Count - 1; i >= 0; i--)
-        {
-            if (LooksLikeLanguageInstruction(history[i].Question))
-                return ExtractLanguage(history[i].Question);
-        }
-        return null;
-    }
+    // The standing reply-language for the session: the sticky preference the client
+    // carries (set from the LLM's language on an earlier INSTRUCTION turn, then sent
+    // back on every request). Survives the history window; no history scan needed.
+    private static string? StandingLanguage(AskRequest request) => request.StandingLanguage;
 
-    // A message whose whole point is to set the reply language, not to fetch data.
-    // Matches a "from now on / reply in / bolo" style cue paired with a language
-    // name. Deliberately narrow to avoid false positives.
-    private static bool LooksLikeLanguageInstruction(string question)
-    {
-        var q = question.Trim().ToLowerInvariant();
-        return LanguageWordRegex().IsMatch(q) && InstructionCueRegex().IsMatch(q);
-    }
-
-    // Does the message also ask for data? Used to stop the pure-instruction
-    // short-circuit from swallowing a combined "count the rows, in Bangla".
-    private static bool LooksLikeDataRequest(string question) =>
-        DataCueRegex().IsMatch(question);
-
-    // Pull the requested language name out of a pure language instruction for the
-    // deterministic path (the LLM path parses it from the LANGUAGE line instead).
-    private static string? ExtractLanguage(string question)
-    {
-        var m = LanguageWordRegex().Match(question);
-        if (!m.Success) return null;
-        var w = m.Groups[1].Value.ToLowerInvariant();
-        return w is "bengali" ? "bangla" : (w is "ingreji" or "ingregi" ? "english" : w);
-    }
-
-    // A language name (English / Bangla / Banglish spellings and inflections,
-    // e.g. "banglay", "englishe"). The optional tail covers Banglish case endings.
-    [GeneratedRegex(@"\b(english|bangla|bengali|banglish|ingreji|ingregi)(e|y|te)?\b", RegexOptions.IgnoreCase)]
-    private static partial Regex LanguageWordRegex();
-
-    // A cue that this is an instruction about HOW to reply, not a data question:
-    // "from now on", "henceforth", "reply/answer/respond in", or Banglish "bolo".
-    [GeneratedRegex(@"(from now|henceforth|going forward|ekhon theke|reply in|respond in|answer in|answer me in|talk in|speak in|\bbolo\b|\bbol\b|\bkotha bolo\b)", RegexOptions.IgnoreCase)]
-    private static partial Regex InstructionCueRegex();
-
-    // Cues that the message ALSO wants data (counts/lists/tables). English +
-    // common Banglish. If present, the pure-instruction short-circuit stands down.
-    [GeneratedRegex(@"(how many|how much|list|show|count|total|average|sum|which|what.*(table|column|row|data)|koto|ktotogulo|dekhao|talika|\btable\b|\brow\b|\bcolumn\b)", RegexOptions.IgnoreCase)]
-    private static partial Regex DataCueRegex();
-
-    // A "LANGUAGE: <name>" line from the analysis output.
-    [GeneratedRegex(@"LANGUAGE:\s*(?<lang>english|bangla|banglish|bengali|none)", RegexOptions.IgnoreCase)]
+    // Reads the free-form language name from the analysis output's "LANGUAGE:" line
+    // (a word, or "none"). This is parsing the model's answer — not detecting intent.
+    [GeneratedRegex(@"LANGUAGE:\s*(?<lang>[A-Za-z]+)", RegexOptions.IgnoreCase)]
     private static partial Regex LanguageLineRegex();
 
     // Extract the label from the model's answer. We read the LAST line that

@@ -84,24 +84,30 @@ public sealed class PromptBuilder
                           question IDEAS. Examples: "what can you do", "suggest a
                           prompt", "what should I ask", "help me get insight".
 
-            INSTRUCTION — the message's ONLY point is to tell the agent HOW to behave/
-                          reply, with NO data request. Most often a pure language
-                          preference. Examples: "from now on answer in English",
-                          "ekhon theke banglay bolo", "reply in Bangla", "always keep
-                          answers short". If the message ALSO asks for data, it is
-                          DATA_QUERY (not INSTRUCTION) — see the CRUCIAL note above.
+            INSTRUCTION — the message's ONLY point is to tell the agent HOW to behave
+                          or reply, with NO request for data. The most common case is
+                          setting the reply LANGUAGE or style. This holds for ANY
+                          language and ANY natural phrasing — if the user is telling
+                          you how future answers should be given (which language, how
+                          long, what tone), it is INSTRUCTION, whether they say it in
+                          English, Bangla, Banglish, Spanish, Hindi, or anything else.
+                          A few examples (not an exhaustive list): "banglay bolo",
+                          "always answer in English", "respond in Spanish from now on",
+                          "keep answers short". If the message ALSO asks for data, it
+                          is DATA_QUERY (not INSTRUCTION) — see the CRUCIAL note above.
 
             OFF_TOPIC   — greeting, thanks, small talk, or anything unrelated to the
                           database or SQL. Examples: "hi", "thanks", "write me a poem".
 
-            For LANGUAGE, output a language ONLY if THIS message contains an explicit
-            request to answer in that language — an actual instruction phrase like
-            "in Bangla", "answer in English", "banglay bolo", "reply in Bangla".
-            The language the message happens to be WRITTEN in does NOT count: a plain
-            English question like "how many teachers" has NO language request, so
-            output: none. Likewise a plain Bangla or Banglish question with no "in X"
-            phrase -> none. Only output bangla/english/banglish when the user
-            explicitly asks for that language in this message; otherwise: none.
+            For LANGUAGE, output the NAME of the language the reply should be in, when
+            the message asks for one — the lowercase English name of ANY language
+            (bangla, english, spanish, hindi, arabic, …); use "banglish" for Bangla
+            written in Latin letters. This covers both a standing preference (INTENT =
+            INSTRUCTION, e.g. "always in bangla" -> bangla) and an in-line request on
+            a data question (e.g. "how many teachers, in english" -> english). The
+            language the message is merely WRITTEN in does NOT count: a plain question
+            with no explicit "in X" / "banglay bolo" style request -> none. Output a
+            language name only when the user actually asks for one; otherwise: none.
 
             Message: {question}
 

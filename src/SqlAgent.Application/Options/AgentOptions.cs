@@ -16,6 +16,14 @@ public sealed class AgentOptions
     public int QueryTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
+    /// Max time to wait for a single LLM call (classify / generate SQL / explain)
+    /// before giving up. Stops a hung or throttled provider (e.g. a Groq rate-limit
+    /// that never returns) from leaving the request pending forever — the user gets
+    /// a clear error instead of an endless spinner.
+    /// </summary>
+    public int LlmTimeoutSeconds { get; set; } = 60;
+
+    /// <summary>
     /// How long a cached schema stays valid before it is re-read from the DB.
     /// A safety net against a schema that changed after it was cached; the query
     /// path also force-refreshes on a DB error (see QueryAgentService). Set to 0
