@@ -57,8 +57,15 @@ public sealed class PromptBuilder
               SELECT 'students' AS table_name UNION ALL SELECT 'teachers' ...
               (one line per table listed above).
             - For "rows in each table", UNION a COUNT(*) per table (not information_schema).
-            - Only if the message is purely a greeting/thanks with no data intent,
-              reply with the single token NO_QUERY instead.
+            - Reply with the single token NO_QUERY (nothing else) whenever the
+              message is NOT a request for specific rows/values FROM the tables.
+              This includes greetings/thanks AND any meta/help/suggestion request,
+              e.g. "what can you do", "how do I use this", "give me ideas", and
+              crucially "suggest me a prompt/question", "suggest a query", "what
+              should I ask", "help me get insight from the data". Asking you to
+              SUGGEST or RECOMMEND a prompt/question is NOT a data query — return
+              NO_QUERY. Only produce SQL when the user directly asks for data
+              (counts, lists, specific records), not for ideas about what to ask.
             - Use only tables/columns from the schema above; never write to the DB.
             - {dialect.PromptSyntaxHint}
             - For a follow-up like "in Bangla" / "as a chart" / "only males", adjust
@@ -116,16 +123,28 @@ public sealed class PromptBuilder
     /// A short, friendly reply for non-data messages (greetings/small talk),
     /// steering the user back toward asking about their database.
     /// </summary>
-    public string BuildChatReplyPrompt(string question, IReadOnlyList<ConversationTurn>? history = null)
+    public string BuildChatReplyPrompt(
+        string question, DatabaseSchema? schema = null,
+        IReadOnlyList<ConversationTurn>? history = null)
     {
         var historyText = RenderHistory(history);
+        var schemaText = schema is null ? "" : $"""
+
+            The connected database has these tables/columns:
+            {RenderSchema(schema)}
+            """;
         return $"""
-            The user said: "{question}"
-            {historyText}
-            This is not a database question. Reply briefly and warmly (1-2 sentences),
-            and gently invite them to ask something about their data (for example,
-            counts, top-N, or filtered lists). Do not write any SQL.
-            Reply in the same language the user used.
+            You are the assistant of an AI SQL agent that answers questions about
+            a database. The user said: "{question}"
+            {historyText}{schemaText}
+            This is NOT a request to retrieve data — it's small talk or a help/meta
+            question (e.g. a greeting, "what can you do", or "suggest a prompt").
+            Reply helpfully and briefly (2-4 sentences). If they asked for prompt
+            ideas or what they can ask, suggest 2-3 concrete example questions
+            grounded in the ACTUAL tables/columns above (e.g. counts, top-N,
+            per-group, trends). Do NOT write SQL. Reply in the same language the
+            user used (English question -> English; if they earlier asked for a
+            language, keep using it).
             """;
     }
 

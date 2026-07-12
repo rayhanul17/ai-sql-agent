@@ -129,7 +129,7 @@ public sealed class QueryAgentService : IQueryAgentService
 
             if (IsNoQuery(rawSql))
             {
-                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, request.History);
+                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, schema, request.History);
                 var reply = string.Empty;
                 await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
                     reply += tok;
@@ -208,11 +208,11 @@ public sealed class QueryAgentService : IQueryAgentService
             });
             if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
 
-            // Not a data request (greeting / small talk) -> answer conversationally.
+            // Not a data request (greeting / help / small talk) -> answer conversationally.
             if (IsNoQuery(rawSql))
             {
-                yield return Status("Explaining result...");
-                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, request.History);
+                yield return Status("Thinking...");
+                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, schema, request.History);
                 await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
                     yield return new StreamChunk { Type = "token", Content = tok };
                 yield return new StreamChunk { Type = "done", Content = model };
