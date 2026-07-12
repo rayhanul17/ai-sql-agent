@@ -66,6 +66,11 @@ public sealed class PromptBuilder
               SUGGEST or RECOMMEND a prompt/question is NOT a data query — return
               NO_QUERY. Only produce SQL when the user directly asks for data
               (counts, lists, specific records), not for ideas about what to ask.
+            - EXCEPTION: if the recent conversation shows a PREVIOUS data query and
+              this message is a short refinement of it (e.g. "as a chart", "as a
+              graph", "in Bangla", "only males", "only their names", "sorted by X",
+              "top 5") — this IS a data request: adjust the previous query and
+              return SQL, do NOT return NO_QUERY.
             - Use only tables/columns from the schema above; never write to the DB.
             - {dialect.PromptSyntaxHint}
             - For a follow-up like "in Bangla" / "as a chart" / "only males", adjust
