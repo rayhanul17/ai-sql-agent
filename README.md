@@ -216,6 +216,13 @@ connection string. The agent introspects that database's live schema and
 answers against it. Prefer a **read-only** connection string — the app enforces
 read-only, but a least-privileged user is the safest backstop.
 
+The introspected schema is **cached** (per connection + dialect) so it's read
+once on Save instead of on every query. To keep it from going stale when the DB
+changes, the cache (a) expires after `Agent:SchemaCacheTtlMinutes` (default 30),
+(b) is **force-refreshed automatically when a query fails** — so a renamed or
+dropped column is re-read and the query self-corrects on retry — and (c) can be
+refreshed manually with the **Refresh schema** button.
+
 ### Which host to use
 
 The `Server=` / `Host=` value depends on **where the app runs**, not where the

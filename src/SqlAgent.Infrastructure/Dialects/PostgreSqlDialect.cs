@@ -9,7 +9,10 @@ public sealed class PostgreSqlDialect : ISqlDialect
     public string DisplayName => "PostgreSQL";
 
     public string PromptSyntaxHint =>
-        "Use PostgreSQL syntax. Quote identifiers with double quotes only if needed. " +
+        "Use PostgreSQL syntax. Quote a table/column name with double quotes (\"Order\") " +
+        "when it is a reserved word or uses uppercase/mixed-case letters; unquoted " +
+        "identifiers are folded to lowercase, so quote anything that isn't plain " +
+        "lowercase. Do NOT use backticks or [brackets]. " +
         "If the user asks for a limited number of rows, use LIMIT n. Current time is NOW().";
 
     // Returns: table_name, column_name, data_type, is_nullable, is_pk, fk_reference

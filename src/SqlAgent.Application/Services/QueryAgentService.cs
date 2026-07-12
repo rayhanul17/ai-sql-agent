@@ -246,6 +246,18 @@ public sealed class QueryAgentService : IQueryAgentService
             lastError = execError;
             prevSql = safeSql;
             if (attempt == MaxRetries) { yield return Err($"Query failed: {execError}"); yield break; }
+
+            // The failure may be a stale cached schema (a column/table changed
+            // since we cached it). Re-read the schema fresh before retrying so the
+            // corrected attempt is grounded in the DB's true current structure.
+            yield return Status("Refreshing schema...");
+            var refreshError = await TryStepAsync(async () =>
+            {
+                _schemaCache.Invalidate(conn, dialectId);
+                schema = await GetSchemaAsync(conn, dialectId, ct);
+            });
+            if (refreshError is not null)
+                _log.LogWarning("Schema refresh before retry failed: {Error}", refreshError);
         }
 
         yield return new StreamChunk { Type = "rows", Data = result };

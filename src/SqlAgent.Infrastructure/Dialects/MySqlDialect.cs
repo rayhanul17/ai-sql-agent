@@ -9,7 +9,9 @@ public sealed class MySqlDialect : ISqlDialect
     public string DisplayName => "MySQL";
 
     public string PromptSyntaxHint =>
-        "Use MySQL syntax. Quote identifiers with backticks if needed. " +
+        "Use MySQL syntax. Quote a table/column name with backticks (`order`) when it " +
+        "is a reserved word or contains special characters. Do NOT use double quotes " +
+        "or [brackets] for identifiers. " +
         "If the user asks for a limited number of rows, use LIMIT n. Current time is NOW().";
 
     // MySQL uses DATABASE() to scope to the current schema.

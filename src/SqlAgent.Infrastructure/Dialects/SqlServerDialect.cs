@@ -15,7 +15,9 @@ public sealed class SqlServerDialect : ISqlDialect
     public string PromptSyntaxHint =>
         "Use T-SQL (Microsoft SQL Server) syntax. If the user asks for a limited " +
         "number of rows, use SELECT TOP n (there is NO LIMIT keyword). " +
-        "Quote identifiers with [brackets] if needed. Current time is GETDATE().";
+        "Quote a table/column name with [square brackets] ([Order]) when it is a " +
+        "reserved word or contains special characters. Do NOT use backticks. " +
+        "Current time is GETDATE().";
 
     public string SchemaIntrospectionSql => """
         SELECT

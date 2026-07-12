@@ -15,6 +15,14 @@ public sealed class AgentOptions
     /// <summary>Statement timeout for executed queries.</summary>
     public int QueryTimeoutSeconds { get; set; } = 30;
 
+    /// <summary>
+    /// How long a cached schema stays valid before it is re-read from the DB.
+    /// A safety net against a schema that changed after it was cached; the query
+    /// path also force-refreshes on a DB error (see QueryAgentService). Set to 0
+    /// to disable time-based expiry (cache until manual refresh / restart).
+    /// </summary>
+    public int SchemaCacheTtlMinutes { get; set; } = 30;
+
     /// <summary>Default demo database connection string (used when the user gives none).</summary>
     public string DefaultConnectionString { get; set; } = string.Empty;
 
