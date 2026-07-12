@@ -404,7 +404,7 @@ function renderResult(area, result, sql) {
     wrap.className = 'result-wrap';
     const table = document.createElement('table');
     table.className = 'result';
-    const thead = '<thead><tr>' + result.columns.map(c => `<th>${escapeHtml(c)}</th>`).join('') + '</tr></thead>';
+    const thead = '<thead><tr>' + result.columns.map(c => `<th>${escapeHtml(prettyColumn(c))}</th>`).join('') + '</tr></thead>';
     const rowsHtml = result.rows.map(r =>
         '<tr>' + r.map(v => {
             const s = v === null || v === undefined ? '' : String(v);
@@ -514,7 +514,11 @@ function drawChart(host, result, cfg, type) {
 async function downloadExcel(result, sql) {
     const res = await fetch('/Chat/Export', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sql, columns: result.columns, rows: result.rows }),
+        body: JSON.stringify({
+            sql,
+            columns: result.columns.map(prettyColumn), // readable headers in Excel too
+            rows: result.rows,
+        }),
     });
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -638,6 +642,19 @@ els.copySqlBtn.addEventListener('click', () => {
     els.copySqlBtn.innerHTML = '<i class="bi bi-check"></i> Copied';
     setTimeout(() => els.copySqlBtn.innerHTML = '<i class="bi bi-clipboard"></i> Copy', 1500);
 });
+
+// Turn a raw column name into a readable header for display only:
+// snake_case / kebab / camelCase -> Title Case (e.g. abc_def -> "Abc Def",
+// customerName -> "Customer Name"). The actual data/SQL is untouched.
+function prettyColumn(name) {
+    if (name == null) return '';
+    return String(name)
+        .replace(/[_-]+/g, ' ')                 // snake / kebab -> spaces
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2') // camelCase -> spaced
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, ch => ch.toUpperCase());
+}
 
 function escapeHtml(v) {
     if (v === null || v === undefined) return '<span class="text-secondary">NULL</span>';
