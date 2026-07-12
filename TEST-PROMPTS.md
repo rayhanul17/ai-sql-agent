@@ -1,13 +1,14 @@
 # Test prompts — by intent
 
 Copy-paste these to sanity-check the agent's behaviour. Every message is first
-**classified** into one of four intents, then routed:
+**classified** into one of five intents, then routed:
 
 | Intent | Symbol | What happens |
 |--------|--------|--------------|
 | `DATA_QUERY`  | 📊 | writes + runs read-only SQL → table + summary (+ chart/Excel) |
 | `SQL_GENERAL` | 📖 | answers as a schema-aware SQL tutor — explains, gives an example, but **runs nothing** |
 | `META_HELP`   | 💬 | explains what the agent can do + suggests schema-grounded prompts |
+| `INSTRUCTION` | ⚙️ | acknowledges a behaviour/language instruction ("answer in English from now on") — no query |
 | `OFF_TOPIC`   | 👋 | politely redirects back to the database — no query |
 
 Tested against the seeded demo PostgreSQL DB
@@ -16,7 +17,8 @@ Tested against the seeded demo PostgreSQL DB
 > Behaviour scales with the model: Groq (qwen3-32b / llama-3.3-70b) and Ollama
 > 7B are reliable; the small 3B handles the everyday cases but may slip on the
 > trickier meta/edge ones. Reasoning models emit a `<think>` block that is
-> stripped before the intent label / SQL is read.
+> stripped before the intent label / SQL is read. Language instructions also have
+> a fast deterministic pre-check so even the 3B never mistakes them for a query.
 
 ---
 
@@ -111,11 +113,14 @@ koto jon teacher ache            → Bangla answer 📊 (Banglish understood)
 how many teachers                → English answer 📊
 ```
 
-Standing instruction (say it once, then ask normally):
+Standing instruction → ⚙️ INSTRUCTION, no query (say it once, then ask normally;
+later answers follow it because recent history is replayed):
 
 ```
-ekhon theke banglay bolo         → then English questions still get Bangla answers
-answer in english from now on    → switches back
+ekhon theke banglay bolo         → acks in Bangla; later answers stay Bangla
+answer in english from now on    → acks; switches back to English
+reply in bangla please           → acks in Bangla
+always keep your answers short    → acks; later summaries stay short
 ```
 
 ## 9. Follow-ups (ask right after a query) → 📊 refine the previous query

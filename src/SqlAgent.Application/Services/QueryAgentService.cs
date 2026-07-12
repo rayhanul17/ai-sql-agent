@@ -1,4 +1,5 @@
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SqlAgent.Application.Options;
@@ -12,7 +13,7 @@ namespace SqlAgent.Application.Services;
 ///   introspect schema -> build prompt -> generate SQL -> validate (safety)
 ///   -> execute read-only -> explain (streamed).
 /// </summary>
-public sealed class QueryAgentService : IQueryAgentService
+public sealed partial class QueryAgentService : IQueryAgentService
 {
     private const int MaxRetries = 1; // one self-correction attempt on DB error
 
@@ -294,10 +295,41 @@ public sealed class QueryAgentService : IQueryAgentService
     private async Task<QueryIntent> ClassifyAsync(
         IAiProvider ai, string model, AskRequest request, DatabaseSchema schema, CancellationToken ct)
     {
+        // Fast, deterministic short-circuit for a language instruction ("from now
+        // on answer in English", "banglay bolo"). These are a small, fixed pattern
+        // that a tiny model sometimes mistakes for a follow-up data query when a
+        // prior query is in history — so we detect them without the LLM, which is
+        // both 100% reliable and one call cheaper.
+        if (LooksLikeLanguageInstruction(request.Question))
+            return QueryIntent.Instruction;
+
         var prompt = _prompts.BuildClassifyPrompt(request.Question, schema, request.History);
         var raw = await ai.GenerateSqlAsync(prompt, model, ct);
         return ParseIntent(raw);
     }
+
+    // A message whose whole point is to set the reply language, not to fetch data.
+    // Matches a "from now on / henceforth" style cue paired with a language name,
+    // in English or common Banglish. Deliberately narrow to avoid false positives
+    // (e.g. "how many customers speak English" must NOT match).
+    private static bool LooksLikeLanguageInstruction(string question)
+    {
+        var q = question.Trim().ToLowerInvariant();
+        var mentionsLanguage = LanguageWordRegex().IsMatch(q);
+        if (!mentionsLanguage) return false;
+        var isInstruction = InstructionCueRegex().IsMatch(q);
+        return isInstruction;
+    }
+
+    // A language name (English / Bangla / Banglish spellings and inflections,
+    // e.g. "banglay", "englishe"). The optional tail covers Banglish case endings.
+    [GeneratedRegex(@"\b(english|bangla|bengali|banglish|ingreji|ingregi)(e|y|te)?\b", RegexOptions.IgnoreCase)]
+    private static partial Regex LanguageWordRegex();
+
+    // A cue that this is an instruction about HOW to reply, not a data question:
+    // "from now on", "henceforth", "reply/answer/respond in", or Banglish "bolo".
+    [GeneratedRegex(@"(from now|henceforth|going forward|ekhon theke|reply in|respond in|answer in|answer me in|talk in|speak in|\bbolo\b|\bbol\b|\bkotha bolo\b)", RegexOptions.IgnoreCase)]
+    private static partial Regex InstructionCueRegex();
 
     // Extract the label from the model's answer. We read the LAST line that
     // contains a known label, so stray mentions of a label earlier in the text
@@ -321,6 +353,7 @@ public sealed class QueryAgentService : IQueryAgentService
         _ when text.Contains("DATA_QUERY") => QueryIntent.DataQuery,
         _ when text.Contains("SQL_GENERAL") => QueryIntent.SqlGeneral,
         _ when text.Contains("META_HELP") => QueryIntent.MetaHelp,
+        _ when text.Contains("INSTRUCTION") => QueryIntent.Instruction,
         _ when text.Contains("OFF_TOPIC") => QueryIntent.OffTopic,
         _ => null,
     };
@@ -330,6 +363,10 @@ public sealed class QueryAgentService : IQueryAgentService
     {
         QueryIntent.SqlGeneral => _prompts.BuildSqlHelpPrompt(request.Question, schema, request.History),
         QueryIntent.MetaHelp => _prompts.BuildMetaHelpPrompt(request.Question, schema, request.History),
+        QueryIntent.Instruction => _prompts.BuildInstructionReplyPrompt(request.Question, schema, request.History),
+        QueryIntent.OffTopic => _prompts.BuildRedirectPrompt(request.Question, schema, request.History),
+        // Only non-data intents reach here (DataQuery is handled before this call);
+        // fall back to a polite redirect for any unexpected value.
         _ => _prompts.BuildRedirectPrompt(request.Question, schema, request.History),
     };
 

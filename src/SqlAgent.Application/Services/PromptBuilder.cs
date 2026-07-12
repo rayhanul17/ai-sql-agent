@@ -81,6 +81,13 @@ public sealed class PromptBuilder
                           this", "suggest a prompt", "what should I ask", "give me
                           example questions", "help me get insight".
 
+            INSTRUCTION — tells the agent HOW to behave/reply rather than asking for
+                          data. Most often a language preference. Examples: "from now
+                          on answer in English", "ekhon theke banglay bolo", "reply
+                          in Bangla", "answer in English from now on", "always keep
+                          answers short". This is NEVER a data request, even right
+                          after a query — it is INSTRUCTION, not DATA_QUERY.
+
             OFF_TOPIC   — greeting, thanks, small talk, or anything unrelated to the
                           database or SQL. Examples: "hi", "hello", "thanks", "who
                           are you", "what's the weather", "write me a poem".
@@ -230,6 +237,30 @@ public sealed class PromptBuilder
             If a schema is given above, suggest 2-3 concrete example questions
             grounded in the ACTUAL tables/columns (e.g. counts, top-N, per-group,
             trends). Do NOT write SQL. Do NOT invent tables that aren't listed.
+            {LanguageRule(question)}
+            """;
+    }
+
+    /// <summary>
+    /// Acknowledge a behavioural instruction (most often a language preference like
+    /// "from now on answer in English"). The instruction persists across turns
+    /// because the client replays recent history, so here we just confirm it and
+    /// invite the next data question. No query is run.
+    /// </summary>
+    public string BuildInstructionReplyPrompt(
+        string question, DatabaseSchema? schema = null,
+        IReadOnlyList<ConversationTurn>? history = null)
+    {
+        var historyText = RenderHistory(history);
+        return $"""
+            You are the assistant of an AI SQL agent that answers questions about a
+            database. The user gave an INSTRUCTION about how to behave (not a data
+            request): "{question}"
+            {historyText}
+            Briefly confirm you'll follow it from now on (1-2 sentences) and invite
+            them to ask about their data. If it is a language instruction, ACK in
+            that requested language and use it going forward. Do NOT write SQL, do
+            NOT list example questions.
             {LanguageRule(question)}
             """;
     }

@@ -18,4 +18,13 @@ public enum QueryIntent
 
     /// <summary>Greeting, small talk, or something unrelated to the database. Politely redirected — no query is run.</summary>
     OffTopic = 3,
+
+    /// <summary>
+    /// Tells the agent HOW to behave rather than asking for data — most commonly a
+    /// standing language preference ("from now on answer in English", "banglay
+    /// bolo"), but also reply-style requests ("always keep answers short").
+    /// Acknowledged conversationally; no query is run. The instruction itself is
+    /// honoured on subsequent turns because the client replays recent history.
+    /// </summary>
+    Instruction = 4,
 }

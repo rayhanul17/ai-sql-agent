@@ -88,6 +88,10 @@ echo "-- greeting / off-topic (no query) --"
 check "hi"                                      noquery
 check "write me a poem about the sea"          noquery
 
+echo "-- instruction: language/behaviour (no query) --"
+check "from now on answer in English"          noquery
+check "always keep your answers short"         noquery
+
 echo "-- boundary: names real tables => data --"
 check "show me a JOIN of students and classes" query
 check "how many students are in each class"    query
