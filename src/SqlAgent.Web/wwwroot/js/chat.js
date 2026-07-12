@@ -27,7 +27,15 @@ const sqlModal = new bootstrap.Modal($('sqlModal'));
 let chartCounter = 0;
 
 const history = [];
-const MAX_HISTORY = 4;
+// Sticky reply-language preference for the whole session, set when the server
+// signals a language instruction ("banglay bolo"). Survives beyond the history
+// window so the preference never expires mid-session. Cleared on clear-chat.
+let stickyLanguage = null;
+// How many recent turns to send back for context. Each turn is tiny (a question
+// plus, for data turns, one line of SQL — never the answer text or result rows),
+// so 10 stays well inside every model's context window while keeping a standing
+// instruction ("banglay bolo") and follow-up context alive for longer.
+const MAX_HISTORY = 10;
 
 // Tracks the in-flight request so it can be cancelled (stop button / clear chat).
 let currentAbort = null;
@@ -541,6 +549,7 @@ async function ask(question) {
         connectionString: applied.dialect === '' ? null : (applied.connStr || null),
         dialect: applied.dialect === '' ? null : Number(applied.dialect),
         history: history.slice(-MAX_HISTORY),
+        standingLanguage: stickyLanguage,
     };
 
     // New request: cancel any previous one, show the stop button.
@@ -586,7 +595,15 @@ async function ask(question) {
                 } else if (chunk.type === 'done') {
                     ui.status.innerHTML = '';
                     ui.answer.classList.remove('typing');
-                    if (currentSql) history.push({ question, sql: currentSql });
+                    // Record every turn (sql may be null for a non-data turn such
+                    // as a language instruction) so the server sees standing
+                    // instructions and follow-up context, not just past queries.
+                    history.push({ question, sql: currentSql || null });
+                    // The server tells us when a message set a language preference;
+                    // make it sticky for the whole session so it outlives history.
+                    if (chunk.data && chunk.data.setLanguage) {
+                        stickyLanguage = chunk.data.setLanguage;
+                    }
                 } else if (chunk.type === 'error') {
                     ui.status.innerHTML = '';
                     ui.answer.classList.remove('typing');
@@ -631,6 +648,7 @@ els.clearBtn.addEventListener('click', () => {
     cancelInFlight();      // stop any in-flight request so the button doesn't spin
     setSending(false);
     history.length = 0;
+    stickyLanguage = null; // a fresh chat starts with no standing language
     els.messages.innerHTML = `<div class="empty-state">
         <i class="bi bi-chat-square-dots"></i>
         <h5>Ask anything about your data</h5>

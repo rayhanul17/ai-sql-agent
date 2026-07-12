@@ -18,6 +18,9 @@ public sealed class AskDto
     public LlmProvider? Provider { get; set; }
     public string? Model { get; set; }
     public List<TurnDto> History { get; set; } = [];
+
+    /// <summary>Sticky session language preference the client carries (e.g. "bangla").</summary>
+    public string? StandingLanguage { get; set; }
 }
 
 /// <summary>Posted to /Chat/TestConnection to validate a runtime connection string.</summary>

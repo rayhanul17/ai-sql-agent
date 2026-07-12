@@ -146,7 +146,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
             if (IsNoData(rawSql))
             {
                 var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema,
-                    EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
+                    EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
                 var msg = string.Empty;
                 await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
                     msg += tok;
@@ -165,7 +165,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
                 conn, dialectId, validation.SafeSql!, _agent.QueryTimeoutSeconds, ct);
 
             var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result,
-                request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
+                request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
             var explanation = string.Empty;
             await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
                 explanation += tok;
@@ -220,7 +220,12 @@ public sealed partial class QueryAgentService : IQueryAgentService
             var chatPrompt = NonDataPrompt(analysis.Intent, request, schema!);
             await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
                 yield return new StreamChunk { Type = "token", Content = tok };
-            yield return new StreamChunk { Type = "done", Content = model };
+            // If this was a language instruction, tell the client which language so
+            // it can make the preference sticky for the rest of the session.
+            var setLang = analysis.Intent == QueryIntent.Instruction
+                ? (analysis.RequestedLanguage ?? ExtractLanguage(request.Question))
+                : null;
+            yield return new StreamChunk { Type = "done", Content = model, Data = setLang is null ? null : new { setLanguage = setLang } };
             yield break;
         }
 
@@ -254,7 +259,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
             {
                 yield return Status("Thinking...");
                 var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema!,
-                    EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
+                    EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
                 await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
                     yield return new StreamChunk { Type = "token", Content = tok };
                 yield return new StreamChunk { Type = "done", Content = model };
@@ -298,7 +303,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
         // Stream explanation.
         yield return Status("Explaining result...");
         var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!,
-            request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
+            request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
         await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
             yield return new StreamChunk { Type = "token", Content = tok };
 
@@ -379,18 +384,19 @@ public sealed partial class QueryAgentService : IQueryAgentService
             : null;
     }
 
-    // Scan history (newest first) for the most recent standing language
-    // instruction ("banglay bolo", "answer in English from now on") and return
-    // the language it set, so later answers keep using it even when the current
-    // question is written in another language. Null if none.
-    private static string? StandingLanguageFrom(IReadOnlyList<ConversationTurn>? history)
+    // The effective standing reply-language: prefer the sticky preference the
+    // client carries for the whole session (survives the history window), then
+    // fall back to scanning the recent history for a language instruction (covers
+    // the first turn after it's set, before the client has echoed it back).
+    private static string? StandingLanguage(AskRequest request)
     {
-        if (history is null) return null;
+        if (!string.IsNullOrWhiteSpace(request.StandingLanguage))
+            return request.StandingLanguage;
+        var history = request.History;
         for (var i = history.Count - 1; i >= 0; i--)
         {
-            var q = history[i].Question;
-            if (LooksLikeLanguageInstruction(q))
-                return ExtractLanguage(q);
+            if (LooksLikeLanguageInstruction(history[i].Question))
+                return ExtractLanguage(history[i].Question);
         }
         return null;
     }

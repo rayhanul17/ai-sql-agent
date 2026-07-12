@@ -148,20 +148,22 @@ Follow-ups like "as a chart" or "only the top 3" need to know the previous query
 so a bounded slice of history rides along with each request — kept deliberately
 small so the context never grows without limit:
 
-- The client stores one entry per successful data turn: just `{question, sql}` —
-  **not** the answer text or the result rows. On the next request it sends only
-  the last **4** turns (`MAX_HISTORY` in `chat.js`).
+- The client stores one entry per turn: just `{question, sql}` — the SQL is null
+  for a non-data turn (e.g. a language instruction), and it's **never** the answer
+  text or the result rows. On the next request it sends only the last **10** turns
+  (`MAX_HISTORY` in `chat.js`).
 - The server renders those into a short "Recent conversation" block in the prompt
   (`RenderHistory` in `PromptBuilder`) — each line is `User asked: …` + `SQL
-  used: …`. That's enough for the model to resolve a follow-up against the prior
-  query.
+  used: …` (SQL line omitted when null). That's enough for the model to resolve a
+  follow-up against the prior query, and enough for the code to spot a standing
+  language instruction several turns back.
 - The **schema is not part of history** — it's introspected/cached separately and
   injected fresh each turn, so it can't go stale inside the conversation.
 
-Why this stays well inside every model's context window: 4 turns × (a question +
-one SQL line) is a few hundred tokens at most, versus ~32K tokens for the local
-3B and ~128K for the Groq model. Sending whole answers or result tables would
-balloon the prompt for no benefit — the SQL alone is what a follow-up needs.
+Why this stays well inside every model's context window: 10 turns × (a question +
+at most one SQL line) is still only a few hundred tokens, versus ~32K tokens for
+the local 3B and ~128K for the Groq model. Sending whole answers or result tables
+would balloon the prompt for no benefit — the SQL alone is what a follow-up needs.
 
 History also carries a **standing language preference**. If an earlier turn was
 "banglay bolo" / "answer in English from now on", the reply language is resolved

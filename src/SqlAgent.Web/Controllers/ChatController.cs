@@ -113,7 +113,8 @@ public sealed class ChatController : Controller
             Model = dto.Model,
             History = dto.History
                 .Select(t => new ConversationTurn { Question = t.Question, Sql = t.Sql })
-                .ToList()
+                .ToList(),
+            StandingLanguage = dto.StandingLanguage
         };
 
         try

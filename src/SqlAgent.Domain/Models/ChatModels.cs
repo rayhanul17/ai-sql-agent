@@ -26,6 +26,15 @@ public sealed class AskRequest
 
     /// <summary>Recent prior turns (oldest first) so follow-up questions resolve.</summary>
     public List<ConversationTurn> History { get; init; } = [];
+
+    /// <summary>
+    /// A sticky reply-language preference the client carries for the whole session
+    /// (set when the user earlier said e.g. "banglay bolo"). Survives beyond the
+    /// history window, so the preference isn't lost after a few more turns. Null =
+    /// no standing preference. An explicit language in the current message still
+    /// overrides it for that one answer.
+    /// </summary>
+    public string? StandingLanguage { get; init; }
 }
 
 /// <summary>The generated SQL plus its execution result and an AI explanation.</summary>
