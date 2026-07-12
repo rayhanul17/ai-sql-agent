@@ -163,6 +163,14 @@ one SQL line) is a few hundred tokens at most, versus ~32K tokens for the local
 3B and ~128K for the Groq model. Sending whole answers or result tables would
 balloon the prompt for no benefit — the SQL alone is what a follow-up needs.
 
+History also carries a **standing language preference**. If an earlier turn was
+"banglay bolo" / "answer in English from now on", the reply language is resolved
+in code (a small regex over the current message and history), not left to the
+model to re-derive: an explicit "answer in X" in the current message wins, else
+the standing instruction, else the question's own language. So after "banglay
+bolo", a later English question is still answered in Bangla — reliably, even on
+the 3B.
+
 ---
 
 ## Where Semantic Kernel fits

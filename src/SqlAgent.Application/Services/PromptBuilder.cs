@@ -94,9 +94,14 @@ public sealed class PromptBuilder
             OFF_TOPIC   — greeting, thanks, small talk, or anything unrelated to the
                           database or SQL. Examples: "hi", "thanks", "write me a poem".
 
-            For LANGUAGE, output the language the user asks THIS reply to be in, if
-            any ("in Bangla", "answer in English", "banglay bolo" -> bangla/english).
-            If the message does not ask for a specific language, output: none.
+            For LANGUAGE, output a language ONLY if THIS message contains an explicit
+            request to answer in that language — an actual instruction phrase like
+            "in Bangla", "answer in English", "banglay bolo", "reply in Bangla".
+            The language the message happens to be WRITTEN in does NOT count: a plain
+            English question like "how many teachers" has NO language request, so
+            output: none. Likewise a plain Bangla or Banglish question with no "in X"
+            phrase -> none. Only output bangla/english/banglish when the user
+            explicitly asks for that language in this message; otherwise: none.
 
             Message: {question}
 
@@ -265,7 +270,8 @@ public sealed class PromptBuilder
     /// query on unrelated tables. Triggered when SQL generation returned NO_DATA.
     /// </summary>
     public string BuildNoDataReplyPrompt(
-        string question, DatabaseSchema schema, string? requestedLanguage = null)
+        string question, DatabaseSchema schema,
+        string? requestedLanguage = null, string? standingLanguage = null)
     {
         var tableList = string.Join(", ", schema.Tables.Select(t => t.Name));
         return $"""
@@ -279,7 +285,7 @@ public sealed class PromptBuilder
             tell them what they CAN ask about, naming a few of the real tables above
             and one concrete example question grounded in them. Be helpful, not
             apologetic. Do NOT write SQL. Do NOT pretend to have any result.
-            {LanguageRuleWithOverride(question, requestedLanguage)}
+            {LanguageRuleWithOverride(question, requestedLanguage, standingLanguage)}
             """;
     }
 
@@ -336,7 +342,8 @@ public sealed class PromptBuilder
 
     public string BuildExplanationPrompt(
         string question, string sql, QueryResult result,
-        IReadOnlyList<ConversationTurn>? history = null, string? requestedLanguage = null)
+        IReadOnlyList<ConversationTurn>? history = null,
+        string? requestedLanguage = null, string? standingLanguage = null)
     {
         var preview = RenderResultPreview(result);
         var historyText = RenderHistory(history);
@@ -355,16 +362,20 @@ public sealed class PromptBuilder
             groupings, min/max). Be concise. Do not mention SQL. Do not end with a
             question. If the result is empty, say no matching records were found.
 
-            {LanguageRuleWithOverride(question, requestedLanguage)}
+            {LanguageRuleWithOverride(question, requestedLanguage, standingLanguage)}
             """;
     }
 
     /// <summary>
-    /// The reply-language rule. If the current message explicitly requested a
-    /// language (parsed out during analysis), that wins; otherwise fall back to a
-    /// standing instruction, then to matching this question's own language.
+    /// The reply-language rule, resolved in priority order:
+    ///   1. an explicit language asked for in THIS message (requestedLanguage);
+    ///   2. a standing instruction from earlier (standingLanguage);
+    ///   3. otherwise match the language this question is written in.
+    /// The first two are detected in code and passed in, so the rule doesn't
+    /// depend on the model re-reading history to honour a standing "banglay bolo".
     /// </summary>
-    private static string LanguageRuleWithOverride(string question, string? requestedLanguage)
+    private static string LanguageRuleWithOverride(
+        string question, string? requestedLanguage, string? standingLanguage)
     {
         if (!string.IsNullOrWhiteSpace(requestedLanguage))
             return $"""
@@ -372,15 +383,17 @@ public sealed class PromptBuilder
                 {requestedLanguage}. Reply in {requestedLanguage}, regardless of the
                 language the question itself was written in.
                 """;
+        if (!string.IsNullOrWhiteSpace(standingLanguage))
+            return $"""
+                Language rule: the user earlier gave a STANDING instruction to reply
+                in {standingLanguage}. Reply in {standingLanguage}, even though this
+                question is written in a different language. This standing preference
+                wins over the question's own language.
+                """;
         return $"""
-            Language rule (in priority order):
-            1. If the user earlier gave a standing instruction to reply in a
-               specific language (e.g. "reply in Bangla from now on", "banglay
-               bolo", "answer in Banglish"), keep using THAT language.
-            2. Otherwise, match the language/script of THIS question: "{question}"
-               — English question -> English answer, Bangla -> Bangla, Banglish
-               (Bangla in Latin letters) -> Banglish. Do not just inherit the
-               language of earlier messages.
+            Language rule: match the language/script of THIS question: "{question}"
+            — English question -> English answer, Bangla -> Bangla, Banglish (Bangla
+            in Latin letters) -> Banglish. Do not just inherit an earlier language.
             """;
     }
 

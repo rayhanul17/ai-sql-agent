@@ -116,14 +116,18 @@ koto jon teacher ache            → Bangla answer 📊 (Banglish understood)
 how many teachers                → English answer 📊
 ```
 
-Standing instruction → ⚙️ INSTRUCTION, no query (say it once, then ask normally;
-later answers follow it because recent history is replayed):
+Standing instruction → ⚙️ INSTRUCTION, no query (say it once, then ask normally).
+The preference then **wins over the language the next question is written in** —
+so after "banglay bolo" an English question still gets a Bangla answer. Priority:
+an explicit "answer in X" in the current message > the standing instruction > the
+question's own language.
 
 ```
-ekhon theke banglay bolo         → acks in Bangla; later answers stay Bangla
-answer in english from now on    → acks; switches back to English
+ekhon theke banglay bolo         → acks; then "how many teachers" (English) → answered in BANGLA
+answer in english from now on    → acks; then Bangla/Banglish questions → answered in ENGLISH
 reply in bangla please           → acks in Bangla
 always keep your answers short    → acks; later summaries stay short
+how many teachers, answer in english   (after "banglay bolo") → ENGLISH for this one, override
 ```
 
 **Double prompt** (data request AND a language in one message) → 📊 query, and

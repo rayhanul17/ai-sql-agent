@@ -145,7 +145,8 @@ public sealed partial class QueryAgentService : IQueryAgentService
             // Subject isn't in this schema -> answer helpfully, don't hallucinate.
             if (IsNoData(rawSql))
             {
-                var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema, analysis.RequestedLanguage);
+                var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema,
+                    EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
                 var msg = string.Empty;
                 await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
                     msg += tok;
@@ -163,7 +164,8 @@ public sealed partial class QueryAgentService : IQueryAgentService
             var result = await _executor.ExecuteReadOnlyAsync(
                 conn, dialectId, validation.SafeSql!, _agent.QueryTimeoutSeconds, ct);
 
-            var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result, request.History, analysis.RequestedLanguage);
+            var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result,
+                request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
             var explanation = string.Empty;
             await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
                 explanation += tok;
@@ -251,7 +253,8 @@ public sealed partial class QueryAgentService : IQueryAgentService
             if (IsNoData(rawSql))
             {
                 yield return Status("Thinking...");
-                var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema!, analysis.RequestedLanguage);
+                var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema!,
+                    EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
                 await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
                     yield return new StreamChunk { Type = "token", Content = tok };
                 yield return new StreamChunk { Type = "done", Content = model };
@@ -294,7 +297,8 @@ public sealed partial class QueryAgentService : IQueryAgentService
 
         // Stream explanation.
         yield return Status("Explaining result...");
-        var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!, request.History, analysis.RequestedLanguage);
+        var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!,
+            request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguageFrom(request.History));
         await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
             yield return new StreamChunk { Type = "token", Content = tok };
 
@@ -361,6 +365,34 @@ public sealed partial class QueryAgentService : IQueryAgentService
             }
         }
         return new MessageAnalysis { Intent = intent, RequestedLanguage = language };
+    }
+
+    // The language explicitly requested in THIS message. Prefer the analysis
+    // result, but fall back to the regex when a tiny model missed an obvious
+    // "answer in X" — so an explicit request reliably overrides a standing one.
+    private static string? EffectiveRequestedLanguage(AskRequest request, MessageAnalysis analysis)
+    {
+        if (!string.IsNullOrWhiteSpace(analysis.RequestedLanguage))
+            return analysis.RequestedLanguage;
+        return LooksLikeLanguageInstruction(request.Question)
+            ? ExtractLanguage(request.Question)
+            : null;
+    }
+
+    // Scan history (newest first) for the most recent standing language
+    // instruction ("banglay bolo", "answer in English from now on") and return
+    // the language it set, so later answers keep using it even when the current
+    // question is written in another language. Null if none.
+    private static string? StandingLanguageFrom(IReadOnlyList<ConversationTurn>? history)
+    {
+        if (history is null) return null;
+        for (var i = history.Count - 1; i >= 0; i--)
+        {
+            var q = history[i].Question;
+            if (LooksLikeLanguageInstruction(q))
+                return ExtractLanguage(q);
+        }
+        return null;
     }
 
     // A message whose whole point is to set the reply language, not to fetch data.
