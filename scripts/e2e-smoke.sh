@@ -90,7 +90,7 @@ check "write me a poem about the sea"          noquery
 
 echo "-- boundary: names real tables => data --"
 check "show me a JOIN of students and classes" query
-check "count students grouped by class"        query
+check "how many students are in each class"    query
 
 echo "-- schema-meta (reads the DB => query) --"
 check "what tables are there"                   query
