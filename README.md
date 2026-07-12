@@ -42,6 +42,15 @@ both the demo PostgreSQL DB and the MySQL classicmodels sample. For behaviour by
 intent (greeting vs meta/help vs data vs dangerous vs follow-up), see
 **[TEST-PROMPTS.md](TEST-PROMPTS.md)**.
 
+To sanity-check a running instance automatically, run the end-to-end smoke test —
+it drives the real endpoint across every intent branch and (when the demo
+Postgres container is up) the schema self-heal and reserved-word quoting:
+
+```bash
+# app must be running; provider 1 = Groq (reliable), 0 = Ollama (local)
+PROVIDER=1 scripts/e2e-smoke.sh
+```
+
 ---
 
 ## Key features
