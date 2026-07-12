@@ -16,11 +16,16 @@ namespace SqlAgent.Application.Services;
 /// </summary>
 public sealed partial class SqlSafetyValidator : ISqlSafetyValidator
 {
-    // Whole-word, case-insensitive. Covers write, DDL, privilege and exec verbs.
+    // Whole-word, case-insensitive. Covers write, DDL, privilege and exec verbs
+    // that cannot legitimately appear inside a read-only SELECT.
+    // NOTE: REPLACE is deliberately NOT here — REPLACE(col, a, b) is a read-only
+    // string function used in valid SELECTs. Its dangerous form is the statement
+    // REPLACE INTO, which is still blocked by INTO below. Only keep words that a
+    // legitimate SELECT would never contain, so we don't reject valid queries.
     private static readonly string[] BlockedKeywords =
     [
         "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "CREATE",
-        "GRANT", "REVOKE", "MERGE", "REPLACE", "EXEC", "EXECUTE", "CALL",
+        "GRANT", "REVOKE", "MERGE", "EXEC", "EXECUTE", "CALL",
         "COPY", "INTO", "ATTACH", "PRAGMA", "VACUUM", "COMMIT", "ROLLBACK"
     ];
 
