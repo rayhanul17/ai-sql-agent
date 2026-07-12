@@ -51,6 +51,14 @@ Postgres container is up) the schema self-heal and reserved-word quoting:
 PROVIDER=1 scripts/e2e-smoke.sh
 ```
 
+It runs the ~20 checks **sequentially** and retries once on a transient rate
+limit, so on Groq's free tier (≈6000 tokens/min) it takes a few minutes but is
+reliable — the tokens-per-minute cap, not the script, is the ceiling, so running
+the checks in parallel only trips HTTP 429. If you have real TPM headroom (a paid
+Groq tier or a strong local Ollama) you can parallelise with `CONCURRENCY=4`.
+On Windows, double-click **`scripts/run-e2e.bat`** to build, start, test, and stop
+in one go.
+
 ---
 
 ## Key features
