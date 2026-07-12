@@ -150,7 +150,14 @@ public sealed class PromptBuilder
             groupings, min/max). Be concise. Do not mention SQL. Do not end with a
             question. If the result is empty, say no matching records were found.
 
-            Reply in the same language the user used (Bangla question -> Bangla answer).
+            Language rule (in priority order):
+            1. If the user earlier gave a standing instruction to reply in a
+               specific language (e.g. "reply in Bangla from now on", "banglay
+               bolo", "answer in Banglish"), keep using THAT language.
+            2. Otherwise, match the language/script of THIS question: "{question}"
+               — English question -> English answer, Bangla -> Bangla, Banglish
+               (Bangla in Latin letters) -> Banglish. Do not just inherit the
+               language of earlier messages.
             """;
     }
 

@@ -491,7 +491,7 @@ function drawChart(host, result, cfg, type) {
         data: {
             labels,
             datasets: [{
-                label: result.columns[cfg.valueCol],
+                label: prettyColumn(result.columns[cfg.valueCol]),
                 data,
                 backgroundColor: isPie ? colors : 'rgba(99,102,241,.6)',
                 borderColor: isPie ? '#0f172a' : 'rgba(139,92,246,1)',
