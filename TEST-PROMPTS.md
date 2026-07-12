@@ -123,6 +123,16 @@ reply in bangla please           → acks in Bangla
 always keep your answers short    → acks; later summaries stay short
 ```
 
+**Double prompt** (data request AND a language in one message) → 📊 query, and
+the answer comes back in the requested language. The message is analysed into
+`INTENT` + `LANGUAGE`, so the language part never suppresses the query:
+
+```
+how many tables, give me answer in bangla   → runs the query, summary in Bangla
+list all teachers, reply in english          → runs the query, summary in English
+koto jon student ache, banglay bolo           → runs the query, summary in Bangla
+```
+
 ## 9. Follow-ups (ask right after a query) → 📊 refine the previous query
 
 ```

@@ -74,12 +74,15 @@ The message is classified into one of **five** intents, and only **data**
 questions touch the database:
 
 ```
-                ┌──────────────────────────────────────────────────┐
-                │  classify: a fast regex short-circuit for language │
-                │  instructions, else 1 small LLM call               │
-                └───────────────────────┬──────────────────────────┘
-                                        │
-   ┌───────────┬───────────┬───────────┼───────────┬───────────────┐
+        ┌──────────────────────────────────────────────────────────┐
+        │  analyse → INTENT + LANGUAGE  (a message can be BOTH a      │
+        │  data query AND a language instruction). A fast regex       │
+        │  short-circuits a PURE language instruction; otherwise      │
+        │  one small LLM call returns two lines the code parses.      │
+        └───────────────────────┬──────────────────────────────────┘
+                                │  INTENT drives the branch;
+                                │  LANGUAGE (if any) is applied to the answer
+   ┌───────────┬───────────┬────┴──────┬───────────┬───────────────┐
    ▼           ▼           ▼           ▼           ▼
 DATA_QUERY  SQL_GENERAL  META_HELP  INSTRUCTION  OFF_TOPIC
 write+run   SQL tutor    help +     ack a        polite
@@ -94,12 +97,21 @@ A data question falls through to steps e–i. The other four call
 `NonDataPrompt()` to pick the right conversational prompt, stream the reply as
 `token` chunks, and stop — no SQL is generated or run.
 
-`INSTRUCTION` covers a standing behaviour/language preference ("from now on
-answer in English"). Because a tiny local model can mistake this for a follow-up
-data query, a small deterministic regex (`LooksLikeLanguageInstruction`) catches
-the common language cues *before* the LLM classify call — reliable even on the
-3B, and one call cheaper. Anything the regex doesn't catch still falls through to
-the LLM, which knows the `INSTRUCTION` label.
+**Why analyse, not just classify.** A single message can carry more than one
+thing — most importantly a data request *and* a language instruction together
+("how many tables, answer in Bangla"). A single-label classifier would pick one
+and drop the other (it used to mislabel that whole message as an INSTRUCTION and
+run no query). So the analysis returns TWO fields: the primary `INTENT` and any
+requested reply `LANGUAGE`. The code then decides — a data query still runs, and
+the requested language is applied to the answer.
+
+`INSTRUCTION` is only for a message whose *sole* point is to set behaviour/
+language ("from now on answer in English"). Because a tiny local model can
+mistake that for a follow-up query, a deterministic regex
+(`LooksLikeLanguageInstruction`) short-circuits the *pure* case *before* the LLM
+call — but it stands down if the message also asks for data (`LooksLikeDataRequest`),
+so a double prompt is never swallowed. Anything the regex doesn't catch falls
+through to the LLM, which returns the `INTENT`/`LANGUAGE` lines.
 
 ### 5. Self-correction (data path)
 

@@ -35,66 +35,72 @@ public sealed class PromptBuilder
     }
 
     /// <summary>
-    /// Classify the user's message into one of four intents so the agent can take
-    /// the right branch (generate SQL vs. answer conversationally). Kept small and
-    /// single-purpose so even a tiny model returns a reliable one-word label.
+    /// Analyse the user's message up front. A message can carry more than one
+    /// thing — most importantly a data request AND a language instruction together
+    /// ("how many tables, answer in Bangla") — so instead of a single label this
+    /// returns TWO lines: the primary INTENT, and any requested reply LANGUAGE.
+    /// The output is line-based (not JSON) so even a tiny model parses reliably.
     /// </summary>
-    public string BuildClassifyPrompt(
+    public string BuildAnalyzePrompt(
         string question, DatabaseSchema schema, IReadOnlyList<ConversationTurn>? history = null)
     {
         var tableList = string.Join(", ", schema.Tables.Select(t => t.Name));
         var historyText = RenderHistory(history);
         return $"""
-            You classify a user's message to an AI SQL agent that answers questions
+            You analyse a user's message to an AI SQL agent that answers questions
             about a database. The database has these tables: {tableList}
             {historyText}
             The message may be in English, Bangla, or Banglish (Bangla in Latin
             letters) — understand it either way.
 
-            Reply with EXACTLY ONE of these labels (nothing else, no punctuation):
+            Reply with EXACTLY these two lines and nothing else:
+            INTENT: <one label from the list below>
+            LANGUAGE: <english | bangla | banglish | none>
+
+            For INTENT, pick the PRIMARY thing the message asks for:
 
             DATA_QUERY  — asks for specific rows/values/counts FROM the tables, or a
                           question about the database itself — its tables, columns,
                           or row counts. "what tables are there", "list the columns
                           of X", "how many rows in each table" are all DATA_QUERY
                           (they read the database), NOT help requests. ALSO: a short
-                          follow-up that refines the PREVIOUS data query in the
-                          conversation above (e.g. "as a chart", "only males",
-                          "sorted by salary", "top 5", "in Bangla"). Examples: "how
-                          many students", "list all teachers", "total fees", "what
-                          tables are there".
-                          IMPORTANT: if the message names ACTUAL tables/columns from
-                          the list above (even while asking for a "query"/"JOIN"),
-                          it wants real data — classify as DATA_QUERY. E.g. "show me
-                          a JOIN of students and classes", "count students grouped
-                          by class" -> DATA_QUERY.
+                          follow-up that refines the PREVIOUS data query (e.g. "as a
+                          chart", "only males", "sorted by salary", "top 5").
+                          IMPORTANT: if the message names ACTUAL tables/columns (even
+                          while asking for a "query"/"JOIN"), it wants real data ->
+                          DATA_QUERY. E.g. "show me a JOIN of students and classes".
+                          CRUCIAL: if the message asks for data AND ALSO says which
+                          language to answer in (e.g. "how many tables, answer in
+                          Bangla"), the INTENT is still DATA_QUERY — the language part
+                          goes in the LANGUAGE line, it does NOT make it an
+                          instruction.
 
-            SQL_GENERAL — a general SQL or database CONCEPT / how-to question with NO
+            SQL_GENERAL — a general SQL/DB CONCEPT or how-to question with NO
                           reference to this database's actual tables. Examples: "what
-                          is a JOIN", "how do I write a GROUP BY", "difference between
-                          WHERE and HAVING", "what is a primary key", "how to sort in
-                          SQL". (If it names real tables from the list, it is
-                          DATA_QUERY instead.)
+                          is a JOIN", "how do I write a GROUP BY", "what is a primary
+                          key". (If it names real tables, it is DATA_QUERY instead.)
 
             META_HELP   — asks what the agent can do, how to use it, or for prompt/
-                          question IDEAS. Examples: "what can you do", "how do I use
-                          this", "suggest a prompt", "what should I ask", "give me
-                          example questions", "help me get insight".
+                          question IDEAS. Examples: "what can you do", "suggest a
+                          prompt", "what should I ask", "help me get insight".
 
-            INSTRUCTION — tells the agent HOW to behave/reply rather than asking for
-                          data. Most often a language preference. Examples: "from now
-                          on answer in English", "ekhon theke banglay bolo", "reply
-                          in Bangla", "answer in English from now on", "always keep
-                          answers short". This is NEVER a data request, even right
-                          after a query — it is INSTRUCTION, not DATA_QUERY.
+            INSTRUCTION — the message's ONLY point is to tell the agent HOW to behave/
+                          reply, with NO data request. Most often a pure language
+                          preference. Examples: "from now on answer in English",
+                          "ekhon theke banglay bolo", "reply in Bangla", "always keep
+                          answers short". If the message ALSO asks for data, it is
+                          DATA_QUERY (not INSTRUCTION) — see the CRUCIAL note above.
 
             OFF_TOPIC   — greeting, thanks, small talk, or anything unrelated to the
-                          database or SQL. Examples: "hi", "hello", "thanks", "who
-                          are you", "what's the weather", "write me a poem".
+                          database or SQL. Examples: "hi", "thanks", "write me a poem".
+
+            For LANGUAGE, output the language the user asks THIS reply to be in, if
+            any ("in Bangla", "answer in English", "banglay bolo" -> bangla/english).
+            If the message does not ask for a specific language, output: none.
 
             Message: {question}
 
-            Label:
+            INTENT:
             """;
     }
 
@@ -294,7 +300,7 @@ public sealed class PromptBuilder
 
     public string BuildExplanationPrompt(
         string question, string sql, QueryResult result,
-        IReadOnlyList<ConversationTurn>? history = null)
+        IReadOnlyList<ConversationTurn>? history = null, string? requestedLanguage = null)
     {
         var preview = RenderResultPreview(result);
         var historyText = RenderHistory(history);
@@ -313,6 +319,24 @@ public sealed class PromptBuilder
             groupings, min/max). Be concise. Do not mention SQL. Do not end with a
             question. If the result is empty, say no matching records were found.
 
+            {LanguageRuleWithOverride(question, requestedLanguage)}
+            """;
+    }
+
+    /// <summary>
+    /// The reply-language rule. If the current message explicitly requested a
+    /// language (parsed out during analysis), that wins; otherwise fall back to a
+    /// standing instruction, then to matching this question's own language.
+    /// </summary>
+    private static string LanguageRuleWithOverride(string question, string? requestedLanguage)
+    {
+        if (!string.IsNullOrWhiteSpace(requestedLanguage))
+            return $"""
+                Language rule: the user asked for THIS answer to be in
+                {requestedLanguage}. Reply in {requestedLanguage}, regardless of the
+                language the question itself was written in.
+                """;
+        return $"""
             Language rule (in priority order):
             1. If the user earlier gave a standing instruction to reply in a
                specific language (e.g. "reply in Bangla from now on", "banglay

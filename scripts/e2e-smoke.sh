@@ -91,6 +91,8 @@ reg "hi"                                      noquery "" "-- greeting / off-topi
 reg "write me a poem about the sea"          noquery
 reg "from now on answer in English"          noquery "" "-- instruction: language/behaviour (no query) --"
 reg "always keep your answers short"         noquery
+reg "how many tables, give me answer in bangla" query "" "-- double prompt: data + language => query, answered in that language --"
+reg "list all teachers, reply in english"    query
 reg "show me a JOIN of students and classes" query   "" "-- boundary: names real tables => data --"
 reg "how many students are in each class"    query
 reg "what tables are there"                   query  "" "-- schema-meta (reads the DB => query) --"
