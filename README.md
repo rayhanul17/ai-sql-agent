@@ -37,9 +37,11 @@ Ask things like:
 - *"How many fees are still unpaid for July?"*
 
 See **[EXAMPLES.md](EXAMPLES.md)** for a big copy‑paste set — English / Bangla /
-Banglish questions and direct SQL (correct, partially‑wrong, and rejected) for
-both the demo PostgreSQL DB and the MySQL classicmodels sample. For behaviour by
-intent (greeting vs meta/help vs data vs dangerous vs follow-up), see
+Banglish questions and direct SQL (correct, partially‑wrong, and rejected). These
+target the **default demo PostgreSQL DB** (seeded automatically); a few extra
+examples use the optional MySQL `classicmodels` sample, which you only have if you
+add that connection yourself. For behaviour by intent (greeting vs meta/help vs
+data vs instruction vs not-in-schema vs dangerous vs follow-up), see
 **[TEST-PROMPTS.md](TEST-PROMPTS.md)**.
 
 To sanity-check a running instance automatically, run the end-to-end smoke test —

@@ -5,10 +5,14 @@ Two ways to ask: **natural language** (English / Bangla / Banglish) or a
 (gear / menu), and for MySQL/SQL Server pick the dialect and paste a connection
 string first.
 
-- **Demo DB** = the seeded PostgreSQL database (`docker compose up`). Tables:
-  `students, teachers, classes, attendance, fees, leaves`.
-- **classicmodels** = the MySQL sample DB. Tables: `customers, employees,
-  offices, products, orders, orderdetails, payments, productlines`.
+- **Demo DB** = the seeded PostgreSQL database that ships with the project and
+  comes up automatically with `docker compose up`. Tables:
+  `students, teachers, classes, attendance, fees, leaves`. Everything works
+  against this out of the box — no extra setup.
+- **classicmodels** *(optional)* = a MySQL sample DB. You only have this if you
+  install it and paste its connection string yourself; the classicmodels examples
+  below are skippable if you haven't. Tables: `customers, employees, offices,
+  products, orders, orderdetails, payments, productlines`.
 
 > Tip: small models (3B) do great on everyday questions; big meta‑questions and
 > polished Bangla are better on 7B or the Groq cloud models.

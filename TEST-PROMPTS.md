@@ -11,8 +11,12 @@ Copy-paste these to sanity-check the agent's behaviour. Every message is first
 | `INSTRUCTION` | ⚙️ | acknowledges a behaviour/language instruction ("answer in English from now on") — no query |
 | `OFF_TOPIC`   | 👋 | politely redirects back to the database — no query |
 
-Tested against the seeded demo PostgreSQL DB
-(tables: `students, teachers, classes, attendance, fees, leaves`).
+All prompts here target the **default demo PostgreSQL DB** that ships with the
+project (tables: `students, teachers, classes, attendance, fees, leaves`) — it's
+seeded automatically by `docker compose up`, so everything below works right after
+`git pull` with no extra setup. MySQL/SQL Server are supported too but optional:
+you only get a `classicmodels`/other DB if you add that connection yourself, so no
+test here depends on one.
 
 > Behaviour scales with the model: Groq (qwen3-32b / llama-3.3-70b) and Ollama
 > 7B are reliable; the small 3B handles the everyday cases but may slip on the
@@ -70,7 +74,6 @@ students in grade 6
 which students were absent
 total fees collected
 how many students in each class
-customers per country            (on the MySQL classicmodels DB)
 ```
 
 ## 5. Schema / meta-about-the-DB questions → 📊 query

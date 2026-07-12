@@ -142,6 +142,29 @@ in history.
 
 ---
 
+## Conversation context (history)
+
+Follow-ups like "as a chart" or "only the top 3" need to know the previous query,
+so a bounded slice of history rides along with each request — kept deliberately
+small so the context never grows without limit:
+
+- The client stores one entry per successful data turn: just `{question, sql}` —
+  **not** the answer text or the result rows. On the next request it sends only
+  the last **4** turns (`MAX_HISTORY` in `chat.js`).
+- The server renders those into a short "Recent conversation" block in the prompt
+  (`RenderHistory` in `PromptBuilder`) — each line is `User asked: …` + `SQL
+  used: …`. That's enough for the model to resolve a follow-up against the prior
+  query.
+- The **schema is not part of history** — it's introspected/cached separately and
+  injected fresh each turn, so it can't go stale inside the conversation.
+
+Why this stays well inside every model's context window: 4 turns × (a question +
+one SQL line) is a few hundred tokens at most, versus ~32K tokens for the local
+3B and ~128K for the Groq model. Sending whole answers or result tables would
+balloon the prompt for no benefit — the SQL alone is what a follow-up needs.
+
+---
+
 ## Where Semantic Kernel fits
 
 **Semantic Kernel (SK)** is Microsoft's .NET SDK that gives a single, uniform way
