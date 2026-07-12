@@ -122,13 +122,25 @@ public sealed class PromptBuilder
             Rules:
             - Write exactly ONE read-only SELECT for the question. Questions about
               the database itself (tables, columns, counts, rows per table) count too.
-            - For "what tables are there", do NOT use information_schema. The table
-              list is given in the schema above; return those names, e.g.
-              SELECT 'students' AS table_name UNION ALL SELECT 'teachers' ...
-              (one line per table listed above).
+            - For questions about the TABLES themselves — "what tables are there",
+              "how many tables", "list the tables" — do NOT use information_schema
+              or pg_catalog, and NEVER invent a schema name like 'your_database_name'.
+              The table list is given in the schema above; build the answer from it:
+                * to LIST them:  SELECT 'students' AS table_name UNION ALL
+                                 SELECT 'teachers' ...  (one line per table above).
+                * to COUNT them: SELECT COUNT(*) AS total_tables FROM (
+                                   SELECT 'students' UNION ALL SELECT 'teachers' ...
+                                 ) t   — i.e. count the tables listed above.
             - For "rows in each table", UNION a COUNT(*) per table (not information_schema).
-            - This message has already been classified as a DATA request, so always
-              produce SQL — do not refuse or return anything but SQL.
+            - This message is a DATA request, so normally produce SQL. BUT if the
+              thing the user is asking about clearly does NOT exist in the schema
+              above — the core entity has no matching table or column at all (e.g.
+              they ask about "sales reps", "employees", "revenue" but the schema
+              only has students/teachers/classes) — do NOT invent a mapping or force
+              an unrelated table. Instead reply with EXACTLY the token NO_DATA and
+              nothing else. Only use NO_DATA when it is genuinely absent; if the
+              wording is just different but a matching table/column exists (e.g.
+              "pupils" -> students, "instructors" -> teachers), write the SQL.
             - For a short follow-up (e.g. "as a chart", "only males", "sorted by X",
               "top 5", "in Bangla"), adjust the PREVIOUS query in the conversation
               above rather than treating those words as data values.
@@ -244,6 +256,30 @@ public sealed class PromptBuilder
             grounded in the ACTUAL tables/columns (e.g. counts, top-N, per-group,
             trends). Do NOT write SQL. Do NOT invent tables that aren't listed.
             {LanguageRule(question)}
+            """;
+    }
+
+    /// <summary>
+    /// Explain that the question's subject isn't in the connected database, and
+    /// point the user at what IS available — instead of running a hallucinated
+    /// query on unrelated tables. Triggered when SQL generation returned NO_DATA.
+    /// </summary>
+    public string BuildNoDataReplyPrompt(
+        string question, DatabaseSchema schema, string? requestedLanguage = null)
+    {
+        var tableList = string.Join(", ", schema.Tables.Select(t => t.Name));
+        return $"""
+            You are the assistant of an AI SQL agent. The user asked: "{question}"
+
+            The connected database does NOT contain what they asked about. Its only
+            tables are: {tableList}
+
+            Reply briefly (2-3 sentences): say plainly that this database doesn't
+            have the data they asked for (name the missing thing if clear), then
+            tell them what they CAN ask about, naming a few of the real tables above
+            and one concrete example question grounded in them. Be helpful, not
+            apologetic. Do NOT write SQL. Do NOT pretend to have any result.
+            {LanguageRuleWithOverride(question, requestedLanguage)}
             """;
     }
 

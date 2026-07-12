@@ -97,6 +97,15 @@ A data question falls through to steps e–i. The other four call
 `NonDataPrompt()` to pick the right conversational prompt, stream the reply as
 `token` chunks, and stop — no SQL is generated or run.
 
+**Unanswerable guard.** Even on the data path, the SQL step can decide the
+question's subject isn't in this schema (e.g. "which sales rep brought the most
+revenue" against a students/teachers DB). Rather than force a hallucinated join
+onto unrelated tables, the model returns the token `NO_DATA`; the code catches it
+and replies with what the database *does* contain plus an example — no query
+runs. It's schema-aware, not keyword-based: the same question runs normally on a
+DB that has employees/payments, and close synonyms ("pupils" → students) still
+generate SQL.
+
 **Why analyse, not just classify.** A single message can carry more than one
 thing — most importantly a data request *and* a language instruction together
 ("how many tables, answer in Bangla"). A single-label classifier would pick one

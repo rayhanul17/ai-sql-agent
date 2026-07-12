@@ -89,6 +89,8 @@ reg "what can you do"                         noquery "" "-- meta / help (no que
 reg "suggest me a prompt for insight"        noquery
 reg "hi"                                      noquery "" "-- greeting / off-topic (no query) --"
 reg "write me a poem about the sea"          noquery
+reg "which sales rep brought the most revenue" noquery "" "-- not-in-schema => no query, helpful redirect (no hallucination) --"
+reg "how many employees work in each office" noquery
 reg "from now on answer in English"          noquery "" "-- instruction: language/behaviour (no query) --"
 reg "always keep your answers short"         noquery
 reg "how many tables, give me answer in bangla" query "" "-- double prompt: data + language => query, answered in that language --"

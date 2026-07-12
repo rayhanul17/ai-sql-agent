@@ -142,6 +142,20 @@ public sealed partial class QueryAgentService : IQueryAgentService
             var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
             _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
 
+            // Subject isn't in this schema -> answer helpfully, don't hallucinate.
+            if (IsNoData(rawSql))
+            {
+                var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema, analysis.RequestedLanguage);
+                var msg = string.Empty;
+                await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
+                    msg += tok;
+                return new AskResult
+                {
+                    Question = request.Question, Success = true,
+                    Explanation = msg, ModelUsed = model
+                };
+            }
+
             var validation = _validator.Validate(rawSql, dialect);
             if (!validation.IsValid)
                 return Fail(request.Question, model, $"Rejected unsafe SQL: {validation.Reason}", rawSql);
@@ -230,6 +244,19 @@ public sealed partial class QueryAgentService : IQueryAgentService
                 _log.LogInformation("Model {Model} generated SQL (attempt {Attempt}): {Sql}", model, attempt + 1, rawSql);
             });
             if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
+
+            // The model signalled the question's subject isn't in this schema
+            // (e.g. "sales reps" against a students/teachers DB). Answer helpfully
+            // instead of running a hallucinated query on unrelated tables.
+            if (IsNoData(rawSql))
+            {
+                yield return Status("Thinking...");
+                var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema!, analysis.RequestedLanguage);
+                await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
+                    yield return new StreamChunk { Type = "token", Content = tok };
+                yield return new StreamChunk { Type = "done", Content = model };
+                yield break;
+            }
 
             var validation = _validator.Validate(rawSql!, dialect!);
             if (!validation.IsValid) { yield return Err($"Rejected unsafe SQL: {validation.Reason}"); yield break; }
@@ -394,6 +421,14 @@ public sealed partial class QueryAgentService : IQueryAgentService
             if (match is not null) return match.Value;
         }
         return MatchLabel(upper) ?? QueryIntent.DataQuery;
+    }
+
+    // True when the model signalled the question's subject isn't in the schema.
+    private static bool IsNoData(string? rawSql)
+    {
+        if (string.IsNullOrWhiteSpace(rawSql)) return false;
+        var cleaned = rawSql.Trim().Trim('`', '"', '\'', '.', ' ', '\r', '\n');
+        return cleaned.Contains("NO_DATA", StringComparison.OrdinalIgnoreCase);
     }
 
     private static QueryIntent? MatchLabel(string text) => text switch
