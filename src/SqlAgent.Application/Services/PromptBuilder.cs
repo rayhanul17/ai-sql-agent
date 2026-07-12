@@ -34,6 +34,63 @@ public sealed class PromptBuilder
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Classify the user's message into one of four intents so the agent can take
+    /// the right branch (generate SQL vs. answer conversationally). Kept small and
+    /// single-purpose so even a tiny model returns a reliable one-word label.
+    /// </summary>
+    public string BuildClassifyPrompt(
+        string question, DatabaseSchema schema, IReadOnlyList<ConversationTurn>? history = null)
+    {
+        var tableList = string.Join(", ", schema.Tables.Select(t => t.Name));
+        var historyText = RenderHistory(history);
+        return $"""
+            You classify a user's message to an AI SQL agent that answers questions
+            about a database. The database has these tables: {tableList}
+            {historyText}
+            The message may be in English, Bangla, or Banglish (Bangla in Latin
+            letters) — understand it either way.
+
+            Reply with EXACTLY ONE of these labels (nothing else, no punctuation):
+
+            DATA_QUERY  — asks for specific rows/values/counts FROM the tables, or a
+                          question about the database itself — its tables, columns,
+                          or row counts. "what tables are there", "list the columns
+                          of X", "how many rows in each table" are all DATA_QUERY
+                          (they read the database), NOT help requests. ALSO: a short
+                          follow-up that refines the PREVIOUS data query in the
+                          conversation above (e.g. "as a chart", "only males",
+                          "sorted by salary", "top 5", "in Bangla"). Examples: "how
+                          many students", "list all teachers", "total fees", "what
+                          tables are there".
+                          IMPORTANT: if the message names ACTUAL tables/columns from
+                          the list above (even while asking for a "query"/"JOIN"),
+                          it wants real data — classify as DATA_QUERY. E.g. "show me
+                          a JOIN of students and classes", "count students grouped
+                          by class" -> DATA_QUERY.
+
+            SQL_GENERAL — a general SQL or database CONCEPT / how-to question with NO
+                          reference to this database's actual tables. Examples: "what
+                          is a JOIN", "how do I write a GROUP BY", "difference between
+                          WHERE and HAVING", "what is a primary key", "how to sort in
+                          SQL". (If it names real tables from the list, it is
+                          DATA_QUERY instead.)
+
+            META_HELP   — asks what the agent can do, how to use it, or for prompt/
+                          question IDEAS. Examples: "what can you do", "how do I use
+                          this", "suggest a prompt", "what should I ask", "give me
+                          example questions", "help me get insight".
+
+            OFF_TOPIC   — greeting, thanks, small talk, or anything unrelated to the
+                          database or SQL. Examples: "hi", "hello", "thanks", "who
+                          are you", "what's the weather", "write me a poem".
+
+            Message: {question}
+
+            Label:
+            """;
+    }
+
     public string BuildSqlPrompt(
         string question, DatabaseSchema schema, ISqlDialect dialect,
         IReadOnlyList<ConversationTurn>? history = null)
@@ -57,28 +114,17 @@ public sealed class PromptBuilder
               SELECT 'students' AS table_name UNION ALL SELECT 'teachers' ...
               (one line per table listed above).
             - For "rows in each table", UNION a COUNT(*) per table (not information_schema).
-            - Reply with the single token NO_QUERY (nothing else) whenever the
-              message is NOT a request for specific rows/values FROM the tables.
-              This includes greetings/thanks AND any meta/help/suggestion request,
-              e.g. "what can you do", "how do I use this", "give me ideas", and
-              crucially "suggest me a prompt/question", "suggest a query", "what
-              should I ask", "help me get insight from the data". Asking you to
-              SUGGEST or RECOMMEND a prompt/question is NOT a data query — return
-              NO_QUERY. Only produce SQL when the user directly asks for data
-              (counts, lists, specific records), not for ideas about what to ask.
-            - EXCEPTION: if the recent conversation shows a PREVIOUS data query and
-              this message is a short refinement of it (e.g. "as a chart", "as a
-              graph", "in Bangla", "only males", "only their names", "sorted by X",
-              "top 5") — this IS a data request: adjust the previous query and
-              return SQL, do NOT return NO_QUERY.
+            - This message has already been classified as a DATA request, so always
+              produce SQL — do not refuse or return anything but SQL.
+            - For a short follow-up (e.g. "as a chart", "only males", "sorted by X",
+              "top 5", "in Bangla"), adjust the PREVIOUS query in the conversation
+              above rather than treating those words as data values.
             - Use only tables/columns from the schema above; never write to the DB.
             - {dialect.PromptSyntaxHint}
-            - For a follow-up like "in Bangla" / "as a chart" / "only males", adjust
-              the previous query rather than treating those words as data values.
             - Return ALL matching rows. Do NOT add LIMIT/TOP unless the user
               explicitly asks to limit the count (e.g. "top 5", "first 10").
               For "all customers" / "list students", return every row (no LIMIT).
-            - Return ONLY the raw SQL (or NO_QUERY) — no markdown, no comments.
+            - Return ONLY the raw SQL — no markdown, no comments.
 
             Question: {question}
 
@@ -124,11 +170,48 @@ public sealed class PromptBuilder
             """;
     }
 
+    /// <summary>Shared language rule so every conversational reply matches the user's language.</summary>
+    private static string LanguageRule(string question) => $"""
+        Reply in the same language the user used for "{question}" (English -> English,
+        Bangla -> Bangla, Banglish (Bangla in Latin letters) -> Banglish). If they
+        earlier gave a standing instruction to use a specific language, keep using it.
+        """;
+
     /// <summary>
-    /// A short, friendly reply for non-data messages (greetings/small talk),
-    /// steering the user back toward asking about their database.
+    /// Answer a general SQL/DB concept question as a schema-aware SQL tutor.
+    /// Explains the concept and, where it helps, illustrates it with an example
+    /// grounded in the user's ACTUAL tables — but never runs a query.
     /// </summary>
-    public string BuildChatReplyPrompt(
+    public string BuildSqlHelpPrompt(
+        string question, DatabaseSchema? schema = null,
+        IReadOnlyList<ConversationTurn>? history = null)
+    {
+        var historyText = RenderHistory(history);
+        var schemaText = schema is null ? "" : $"""
+
+            The connected database has these tables/columns you can use in examples:
+            {RenderSchema(schema)}
+            """;
+        return $"""
+            You are a friendly, expert SQL tutor inside an AI SQL agent. The user
+            asked a general SQL/database concept question: "{question}"
+            {historyText}{schemaText}
+            Explain the concept clearly and briefly (3-6 sentences). Where it helps,
+            include ONE small illustrative SQL example — and if a schema is given
+            above, base that example on the ACTUAL tables/columns shown so it feels
+            concrete. This is teaching, so a short example snippet in your reply is
+            welcome, but you are NOT answering a data request: do not claim to have
+            run anything or to show real results. End by inviting them to ask about
+            their own data if relevant.
+            {LanguageRule(question)}
+            """;
+    }
+
+    /// <summary>
+    /// Answer a meta/help request: what the agent can do, how to use it, or for
+    /// prompt ideas — grounded in the actual tables so suggestions are usable.
+    /// </summary>
+    public string BuildMetaHelpPrompt(
         string question, DatabaseSchema? schema = null,
         IReadOnlyList<ConversationTurn>? history = null)
     {
@@ -139,17 +222,42 @@ public sealed class PromptBuilder
             {RenderSchema(schema)}
             """;
         return $"""
-            You are the assistant of an AI SQL agent that answers questions about
-            a database. The user said: "{question}"
+            You are the assistant of an AI SQL agent that answers questions about a
+            database in plain language. The user asked a help/meta question: "{question}"
             {historyText}{schemaText}
-            This is NOT a request to retrieve data — it's small talk or a help/meta
-            question (e.g. a greeting, "what can you do", or "suggest a prompt").
-            Reply helpfully and briefly (2-4 sentences). If they asked for prompt
-            ideas or what they can ask, suggest 2-3 concrete example questions
-            grounded in the ACTUAL tables/columns above (e.g. counts, top-N,
-            per-group, trends). Do NOT write SQL. Reply in the same language the
-            user used (English question -> English; if they earlier asked for a
-            language, keep using it).
+            Reply helpfully and briefly (2-4 sentences). Explain that they can ask
+            questions about their data in plain language and you'll fetch the answer.
+            If a schema is given above, suggest 2-3 concrete example questions
+            grounded in the ACTUAL tables/columns (e.g. counts, top-N, per-group,
+            trends). Do NOT write SQL. Do NOT invent tables that aren't listed.
+            {LanguageRule(question)}
+            """;
+    }
+
+    /// <summary>
+    /// Politely handle an off-topic / small-talk message: acknowledge briefly and
+    /// steer back to the database. Keeps the agent in scope (not a general chatbot).
+    /// </summary>
+    public string BuildRedirectPrompt(
+        string question, DatabaseSchema? schema = null,
+        IReadOnlyList<ConversationTurn>? history = null)
+    {
+        var historyText = RenderHistory(history);
+        var schemaText = schema is null ? "" : $"""
+
+            The connected database has these tables: {string.Join(", ", schema.Tables.Select(t => t.Name))}
+            """;
+        return $"""
+            You are the assistant of an AI SQL agent that answers questions about a
+            database. The user said something that is small talk or off-topic (not
+            about the database or SQL): "{question}"
+            {historyText}{schemaText}
+            Respond warmly in ONE or TWO short sentences, then gently steer them back:
+            make clear you help with their database and SQL, and (if a schema is
+            given) hint at one thing they could ask about it. Do NOT answer the
+            off-topic question at length or act as a general-purpose assistant.
+            Do NOT write SQL.
+            {LanguageRule(question)}
             """;
     }
 

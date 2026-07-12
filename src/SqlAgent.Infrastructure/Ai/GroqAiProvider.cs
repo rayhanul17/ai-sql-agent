@@ -38,7 +38,9 @@ public sealed class GroqAiProvider : IAiProvider
         var history = new ChatHistory();
         history.AddUserMessage(prompt);
         var response = await Chat(model).GetChatMessageContentAsync(history, cancellationToken: ct);
-        return response.Content ?? string.Empty;
+        // Reasoning models (e.g. qwen3) prepend a <think>...</think> block; strip it
+        // so the caller gets only the SQL / intent label, not the chain-of-thought.
+        return ThinkFilter.StripString(response.Content);
     }
 
     public IAsyncEnumerable<string> StreamExplanationAsync(

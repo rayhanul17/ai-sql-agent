@@ -68,4 +68,27 @@ public static class ThinkFilter
         var keep = Math.Min(tagLen - 1, s.Length);
         return s[^keep..];
     }
+
+    /// <summary>
+    /// Strip reasoning blocks from a complete (non-streamed) string — used for the
+    /// one-shot SQL/classify calls where we get the whole response at once. Removes
+    /// every &lt;think&gt;...&lt;/think&gt; pair; if a &lt;think&gt; is left unclosed
+    /// (some reasoning models emit only the opening tag), drops everything after it.
+    /// </summary>
+    public static string StripString(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return string.Empty;
+        var sb = new System.Text.StringBuilder(text.Length);
+        var i = 0;
+        while (i < text.Length)
+        {
+            var open = text.IndexOf(Open, i, StringComparison.OrdinalIgnoreCase);
+            if (open < 0) { sb.Append(text, i, text.Length - i); break; }
+            sb.Append(text, i, open - i);
+            var close = text.IndexOf(Close, open + Open.Length, StringComparison.OrdinalIgnoreCase);
+            if (close < 0) break; // unclosed think -> discard the rest
+            i = close + Close.Length;
+        }
+        return sb.ToString().Trim();
+    }
 }

@@ -123,13 +123,10 @@ public sealed class QueryAgentService : IQueryAgentService
             var dialect = _dialects.Get(dialectId);
             var schema = await GetSchemaAsync(conn, dialectId, ct);
 
-            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, request.History);
-            var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
-            _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
-
-            if (IsNoQuery(rawSql))
+            var intent = await ClassifyAsync(ai, model, request, schema, ct);
+            if (intent != QueryIntent.DataQuery)
             {
-                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, schema, request.History);
+                var chatPrompt = NonDataPrompt(intent, request, schema);
                 var reply = string.Empty;
                 await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
                     reply += tok;
@@ -139,6 +136,10 @@ public sealed class QueryAgentService : IQueryAgentService
                     Explanation = reply, ModelUsed = model
                 };
             }
+
+            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, request.History);
+            var rawSql = await ai.GenerateSqlAsync(sqlPrompt, model, ct);
+            _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
 
             var validation = _validator.Validate(rawSql, dialect);
             if (!validation.IsValid)
@@ -185,6 +186,25 @@ public sealed class QueryAgentService : IQueryAgentService
         stepError = await TryStepAsync(async () => schema = await GetSchemaAsync(conn, dialectId, ct));
         if (stepError is not null) { yield return Err($"Could not connect / read schema: {stepError}"); yield break; }
 
+        // Classify intent up-front so we take the right branch (and show the right
+        // status) instead of forcing every message through the SQL writer.
+        yield return Status("Understanding your question...");
+        var intent = QueryIntent.DataQuery;
+        stepError = await TryStepAsync(async () => intent = await ClassifyAsync(ai, model, request, schema!, ct));
+        if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
+        _log.LogInformation("Classified intent: {Intent} for question: {Q}", intent, request.Question);
+
+        // Non-data intents (SQL help / meta / off-topic) -> answer conversationally.
+        if (intent != QueryIntent.DataQuery)
+        {
+            yield return Status("Thinking...");
+            var chatPrompt = NonDataPrompt(intent, request, schema!);
+            await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
+                yield return new StreamChunk { Type = "token", Content = tok };
+            yield return new StreamChunk { Type = "done", Content = model };
+            yield break;
+        }
+
         // Generate -> validate -> execute, retrying once if the DB rejects the
         // SQL (e.g. a hallucinated column). The DB error is fed back to the model.
         string? safeSql = null;
@@ -207,17 +227,6 @@ public sealed class QueryAgentService : IQueryAgentService
                 _log.LogInformation("Model {Model} generated SQL (attempt {Attempt}): {Sql}", model, attempt + 1, rawSql);
             });
             if (stepError is not null) { yield return Err($"Model error: {stepError}"); yield break; }
-
-            // Not a data request (greeting / help / small talk) -> answer conversationally.
-            if (IsNoQuery(rawSql))
-            {
-                yield return Status("Thinking...");
-                var chatPrompt = _prompts.BuildChatReplyPrompt(request.Question, schema, request.History);
-                await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
-                    yield return new StreamChunk { Type = "token", Content = tok };
-                yield return new StreamChunk { Type = "done", Content = model };
-                yield break;
-            }
 
             var validation = _validator.Validate(rawSql!, dialect!);
             if (!validation.IsValid) { yield return Err($"Rejected unsafe SQL: {validation.Reason}"); yield break; }
@@ -264,13 +273,53 @@ public sealed class QueryAgentService : IQueryAgentService
         catch (Exception ex) { return ex.Message; }
     }
 
-    // True when the model signalled the input isn't a data request.
-    private static bool IsNoQuery(string? rawSql)
+    /// <summary>
+    /// Ask the model to classify the message into an intent. Kept lenient: the
+    /// label is matched loosely, and anything unrecognised falls back to
+    /// DataQuery (the agent's core job) so a fuzzy classifier never blocks a real
+    /// data question.
+    /// </summary>
+    private async Task<QueryIntent> ClassifyAsync(
+        IAiProvider ai, string model, AskRequest request, DatabaseSchema schema, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(rawSql)) return true;
-        var cleaned = rawSql.Trim().Trim('`', '"', '\'', '.', ' ', '\r', '\n');
-        return cleaned.Contains("NO_QUERY", StringComparison.OrdinalIgnoreCase);
+        var prompt = _prompts.BuildClassifyPrompt(request.Question, schema, request.History);
+        var raw = await ai.GenerateSqlAsync(prompt, model, ct);
+        return ParseIntent(raw);
     }
+
+    // Extract the label from the model's answer. We read the LAST line that
+    // contains a known label, so stray mentions of a label earlier in the text
+    // (e.g. a model restating the options) don't win over the final verdict.
+    // Default to DataQuery so an unclear classification still answers the data.
+    private static QueryIntent ParseIntent(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return QueryIntent.DataQuery;
+        var upper = raw.ToUpperInvariant();
+        var lines = upper.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var match = MatchLabel(lines[i]);
+            if (match is not null) return match.Value;
+        }
+        return MatchLabel(upper) ?? QueryIntent.DataQuery;
+    }
+
+    private static QueryIntent? MatchLabel(string text) => text switch
+    {
+        _ when text.Contains("DATA_QUERY") => QueryIntent.DataQuery,
+        _ when text.Contains("SQL_GENERAL") => QueryIntent.SqlGeneral,
+        _ when text.Contains("META_HELP") => QueryIntent.MetaHelp,
+        _ when text.Contains("OFF_TOPIC") => QueryIntent.OffTopic,
+        _ => null,
+    };
+
+    /// <summary>Pick the right conversational prompt for a non-data intent.</summary>
+    private string NonDataPrompt(QueryIntent intent, AskRequest request, DatabaseSchema schema) => intent switch
+    {
+        QueryIntent.SqlGeneral => _prompts.BuildSqlHelpPrompt(request.Question, schema, request.History),
+        QueryIntent.MetaHelp => _prompts.BuildMetaHelpPrompt(request.Question, schema, request.History),
+        _ => _prompts.BuildRedirectPrompt(request.Question, schema, request.History),
+    };
 
     private static StreamChunk Status(string s) => new() { Type = "status", Content = s };
     private static StreamChunk Err(string s) => new() { Type = "error", Content = s };
