@@ -19,8 +19,9 @@ services:
       POSTGRES_USER: agent_owner
       POSTGRES_PASSWORD: owner_pass
     ports:
-      # Optional host access; 15432 avoids the local 5432/5433 often already in
-      # use. The app container reaches postgres by service name on 5432 regardless.
+      # Optional host access on an uncommon port (15432) so the demo runs
+      # side-by-side with a standard local Postgres without clashing. The app
+      # container reaches postgres by service name on 5432 regardless.
       - "15432:5432"
     volumes:
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
@@ -80,9 +81,9 @@ services:
     # below reports it as unhealthy (e.g. it hangs and stops responding).
     restart: unless-stopped
     ports:
-      # Host 18080 -> container 8080. An uncommon host port is used on purpose:
-      # common ones (8080, 8081, …) are often already taken by other services on
-      # a dev machine. Change the host side here if 18080 is busy too.
+      # Host 18080 -> container 8080. We deliberately publish on an uncommon host
+      # port so the app runs side-by-side with other local services without
+      # competing for a common port. Change the host side here if you prefer.
       - "18080:8080"
     depends_on:
       postgres:

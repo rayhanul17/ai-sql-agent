@@ -18,9 +18,10 @@ services:
       POSTGRES_USER: agent_owner
       POSTGRES_PASSWORD: owner_pass
     ports:
-      # Host 15432 -> container 5432. An uncommon host port is used on purpose:
-      # 5432 (and often 5433) is already taken by a local Postgres on a dev
-      # machine. Native runs use this via appsettings' DefaultConnectionString.
+      # Host 15432 -> container 5432. We deliberately publish on an uncommon host
+      # port so this demo runs side-by-side with any standard local Postgres
+      # (which owns 5432) without clashing. Native runs use this via appsettings'
+      # DefaultConnectionString.
       - "15432:5432"
     volumes:
       # *.sql here run in filename order on first initialisation only.

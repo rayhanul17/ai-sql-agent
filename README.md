@@ -287,10 +287,10 @@ Only pulled models are enabled in the UI dropdown; the 7B option shows as
 "not pulled" until you run the `--profile full` command (or
 `docker exec agent-ollama ollama pull qwen2.5-coder:7b`).
 
-> In development, PostgreSQL is published on host port **15432** (an uncommon
-> port, to avoid a local 5432/5433 already in use); the app's default connection
-> string points at 15432. In the all-in-one stack the app reaches Postgres by
-> service name (port 5432) regardless.
+> In development, PostgreSQL is published on an **uncommon host port (15432)** so
+> the demo runs side-by-side with any standard local Postgres without competing
+> for port 5432; the app's default connection string points at 15432. In the
+> all-in-one stack the app reaches Postgres by service name (port 5432) regardless.
 
 ---
 
