@@ -44,9 +44,31 @@ add that connection yourself. For behaviour by intent (greeting vs meta/help vs
 data vs instruction vs not-in-schema vs dangerous vs follow-up), see
 **[TEST-PROMPTS.md](TEST-PROMPTS.md)**.
 
-To sanity-check a running instance automatically, run the end-to-end smoke test —
-it drives the real endpoint across every intent branch and (when the demo
-Postgres container is up) the schema self-heal and reserved-word quoting:
+### Unit tests
+
+Fast, offline **xUnit** tests live in `tests/SqlAgent.Tests/` — no database, model,
+or running app needed. They cover the security-critical and parsing logic:
+
+- **SQL safety validator** — accepts valid `SELECT` / CTE / `REPLACE()`; rejects
+  `INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/CREATE/GRANT/EXEC/CALL`, chained
+  statements, and non-`SELECT` starts; cleans model formatting (fences/`<think>`).
+- **Intent/analysis parsing** — all five intents, the requested-language line, and
+  the safe fall-back to `DATA_QUERY` on garbled output.
+- **Excel export** — formula-injection guard (`= + - @`) and the `JsonElement`
+  unwrap that makes it fire on real request data.
+
+```bash
+dotnet test          # ~47 tests, runs in well under a second
+```
+
+Tests are a separate project, so they don't affect how the app builds, runs, or
+deploys — they only run when you invoke `dotnet test`.
+
+### End-to-end smoke test
+
+To sanity-check a *running* instance, the smoke test drives the real endpoint
+across every intent branch and (when the demo Postgres container is up) the schema
+self-heal and reserved-word quoting:
 
 ```bash
 # app must be running; provider 1 = Groq (reliable), 0 = Ollama (local)
