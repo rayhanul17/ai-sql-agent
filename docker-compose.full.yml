@@ -19,9 +19,9 @@ services:
       POSTGRES_USER: agent_owner
       POSTGRES_PASSWORD: owner_pass
     ports:
-      # Optional host access; 5433 avoids the local 5432 already in use.
-      # The app container reaches postgres by service name on 5432 regardless.
-      - "5433:5432"
+      # Optional host access; 15432 avoids the local 5432/5433 often already in
+      # use. The app container reaches postgres by service name on 5432 regardless.
+      - "15432:5432"
     volumes:
       - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
       - agent_pgdata:/var/lib/postgresql/data

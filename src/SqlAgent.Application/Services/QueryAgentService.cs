@@ -346,7 +346,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
     [GeneratedRegex(@"\b(password|pwd|user id|uid|username|user|host|server|data source|database|initial catalog|port)\s*=\s*[^;]*", RegexOptions.IgnoreCase)]
     private static partial Regex ConnStringFragmentRegex();
 
-    // Bare host:port like localhost:5433 or 10.0.0.1:1433.
+    // Bare host:port like localhost:15432 or 10.0.0.1:1433.
     [GeneratedRegex(@"\b[\w.-]+:\d{2,5}\b")]
     private static partial Regex HostPortRegex();
 
