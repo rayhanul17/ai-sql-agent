@@ -151,6 +151,9 @@ table.result tr:hover td { background: var(--hover); }
 
 .chart-wrap { margin-top: 14px; max-height: 340px; }
 .chart-types { display: inline-flex; gap: 4px; margin-left: 4px; }
+.chart-axes { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.chart-axis { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; color: var(--text-dim); }
+.chart-axis select { width: auto; min-width: 140px; }
 
 .sql-block {
     background: #0b1220; color: #a5b4fc;

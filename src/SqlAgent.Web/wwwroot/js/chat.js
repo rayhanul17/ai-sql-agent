@@ -437,7 +437,20 @@ function renderResult(area, result, sql) {
     if (chartable) {
         const chartHost = document.createElement('div');
         chartHost.className = 'chart-wrap';
+        // Axis pickers (hidden until a chart is drawn). cfg is mutable so the user
+        // can override the auto-detected label/value columns.
+        const cfg = { ...chartable };
         let current = null;
+        let currentType = null;
+
+        const redraw = () => {
+            if (!currentType) return;
+            if (current) current.destroy();
+            chartHost.innerHTML = '';
+            current = drawChart(chartHost, result, cfg, currentType);
+        };
+
+        const axes = buildAxisPickers(result, cfg, redraw); // returns a hidden <div>
 
         const types = document.createElement('span');
         types.className = 'chart-types';
@@ -445,18 +458,48 @@ function renderResult(area, result, sql) {
             const icon = { bar: 'bi-bar-chart', line: 'bi-graph-up', pie: 'bi-pie-chart' }[type];
             const b = actionBtn(icon, type[0].toUpperCase() + type.slice(1), 'btn-outline-warning');
             b.onclick = () => {
-                if (current) current.destroy();
-                chartHost.innerHTML = '';
-                current = drawChart(chartHost, result, chartable, type);
+                currentType = type;
+                axes.classList.remove('hidden'); // reveal the X/Y pickers once charting
+                redraw();
             };
             types.appendChild(b);
         });
         actions.appendChild(types);
         area.appendChild(actions);
+        area.appendChild(axes);
         area.appendChild(chartHost);
     } else {
         area.appendChild(actions);
     }
+}
+
+// A small "X: [col]  Y: [col]" picker row shown above a chart. Changing either
+// dropdown updates cfg and re-draws via the supplied callback.
+function buildAxisPickers(result, cfg, onChange) {
+    const wrap = document.createElement('div');
+    wrap.className = 'chart-axes hidden';
+
+    const makeSelect = (labelText, selectedIndex, onPick) => {
+        const box = document.createElement('label');
+        box.className = 'chart-axis';
+        box.append(labelText + ' ');
+        const sel = document.createElement('select');
+        sel.className = 'form-select form-select-sm';
+        result.columns.forEach((c, i) => {
+            const opt = document.createElement('option');
+            opt.value = String(i);
+            opt.textContent = prettyColumn(c);
+            if (i === selectedIndex) opt.selected = true;
+            sel.appendChild(opt);
+        });
+        sel.onchange = () => { onPick(Number(sel.value)); onChange(); };
+        box.appendChild(sel);
+        return box;
+    };
+
+    wrap.appendChild(makeSelect('Label (X):', cfg.labelCol, i => { cfg.labelCol = i; }));
+    wrap.appendChild(makeSelect('Value (Y):', cfg.valueCol, i => { cfg.valueCol = i; }));
+    return wrap;
 }
 
 function actionBtn(icon, label, cls) {
@@ -466,18 +509,29 @@ function actionBtn(icon, label, cls) {
     return b;
 }
 
-// Chartable = has a label (text) column and a numeric column, reasonable row count.
+// Chartable = has a label column and a numeric VALUE column, reasonable row count.
+// We deliberately skip id-like columns (e.g. "id", "class_id") when picking the
+// value — an id is numeric but meaningless to chart. So for
+// [Id, Name, Section, Total Collected] the value is "Total Collected", not "Id",
+// and the label is "Name". The user can still change both via the chart dropdowns.
 function detectChartable(result) {
     const n = result.columns.length;
     if (n < 2 || result.rowCount === 0) return null;
     const colIsNumeric = i => result.rows.every(r => isNumeric(r[i]));
-    let valueCol = -1, labelCol = -1;
-    for (let i = 0; i < n; i++) {
-        if (valueCol === -1 && colIsNumeric(i)) valueCol = i;
-        else if (labelCol === -1 && !colIsNumeric(i)) labelCol = i;
-    }
+    const isIdName = i => /(^|_)id$/i.test(result.columns[i]);
+
+    // Value: first numeric column that isn't an id; fall back to any numeric.
+    let valueCol = -1;
+    for (let i = 0; i < n; i++) if (colIsNumeric(i) && !isIdName(i)) { valueCol = i; break; }
+    if (valueCol === -1) for (let i = 0; i < n; i++) if (colIsNumeric(i)) { valueCol = i; break; }
     if (valueCol === -1) return null;
+
+    // Label: first non-numeric column; else first non-id column; else column 0.
+    let labelCol = -1;
+    for (let i = 0; i < n; i++) if (i !== valueCol && !colIsNumeric(i)) { labelCol = i; break; }
+    if (labelCol === -1) for (let i = 0; i < n; i++) if (i !== valueCol && !isIdName(i)) { labelCol = i; break; }
     if (labelCol === -1) labelCol = valueCol === 0 ? 1 : 0;
+
     return { labelCol, valueCol };
 }
 
