@@ -34,7 +34,7 @@ public sealed class SqlExecutor : ISqlExecutor
 
     public async Task<QueryResult> ExecuteReadOnlyAsync(
         string connectionString, DbDialect dialect, string safeSql,
-        int timeoutSeconds, CancellationToken ct = default)
+        int timeoutSeconds, int maxRows = 0, CancellationToken ct = default)
     {
         await using var conn = _connections.Create(connectionString, dialect);
         await conn.OpenAsync(ct);
@@ -60,6 +60,15 @@ public sealed class SqlExecutor : ISqlExecutor
                 for (var i = 0; i < reader.FieldCount; i++)
                     row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i);
                 result.Rows.Add(row);
+
+                // Hard backstop against a runaway result set. 0 = unlimited.
+                // Independent of any LIMIT in the SQL, so it holds even if the model
+                // omitted one. We stop reading (and flag it) rather than error out.
+                if (maxRows > 0 && result.Rows.Count >= maxRows)
+                {
+                    result.Truncated = true;
+                    break;
+                }
             }
         }
 

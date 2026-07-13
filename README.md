@@ -107,6 +107,32 @@ read-only directly as well.
 
 ---
 
+## Privacy & security posture (read before exposing it)
+
+This app is built for **local, single-user, trusted use** (a demo / your own
+machine). It is intentionally simple; a few things you should know:
+
+- **Cloud provider (Groq) sends your data off the machine.** When you pick Groq,
+  the database **schema, the generated SQL, and a preview of the result rows** are
+  sent to Groq's cloud API to produce the answer. Use **Ollama** to keep
+  everything **fully local** — nothing leaves your machine. The provider hint in
+  the UI states this.
+- **No authentication or CSRF protection.** The POST endpoints (Ask, TestConnection,
+  LoadSchema, Warmup, Export) are open. That's fine on `localhost`, but **do not
+  expose this to a network or the internet** without adding auth and antiforgery.
+- **Connection strings are stored in the browser.** Custom connection strings you
+  Save (including any password) are kept in `localStorage` in plaintext for
+  convenience, and the password is masked in logs but not encrypted at rest in the
+  browser. Prefer a **read-only, least-privileged** DB user, and use **Clear chat**
+  / clear site data on a shared machine.
+- **Read-only, defense in depth.** Generated SQL is validated (SELECT-only, single
+  statement, keyword block) and executed inside a rolled-back READ ONLY transaction;
+  a read-only DB user is the final backstop. Excel exports are sanitised against
+  formula injection. Errors shown in the UI are trimmed of connection/driver detail
+  (full detail goes to the log file).
+
+---
+
 ## Architecture (Clean Architecture, no MediatR)
 
 ```

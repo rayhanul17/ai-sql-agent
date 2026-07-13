@@ -14,6 +14,7 @@ public interface ISqlExecutor
         DbDialect dialect,
         string safeSql,
         int timeoutSeconds,
+        int maxRows = 0,
         CancellationToken ct = default);
 
     /// <summary>Verifies a runtime connection string can connect (used before first query).</summary>

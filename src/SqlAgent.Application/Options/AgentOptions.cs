@@ -16,6 +16,14 @@ public sealed class AgentOptions
     public int QueryTimeoutSeconds { get; set; } = 30;
 
     /// <summary>
+    /// Safety cap on rows returned by a single query. 0 = unlimited (the default,
+    /// so demos show full data). When &gt; 0, the data reader stops after this many
+    /// rows as a hard backstop against a runaway result set — independent of any
+    /// LIMIT the SQL itself may or may not have.
+    /// </summary>
+    public int MaxRows { get; set; } = 0;
+
+    /// <summary>
     /// Max time to wait for a single LLM call (classify / generate SQL / explain)
     /// before giving up. Stops a hung or throttled provider (e.g. a Groq rate-limit
     /// that never returns) from leaving the request pending forever — the user gets

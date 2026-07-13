@@ -89,7 +89,10 @@ public sealed class ChatController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { ok = false, error = ex.Message }, JsonOpts);
+            // Don't echo the exception: it can contain the connection string the
+            // user typed (password included). Log the detail, return a generic hint.
+            _log.LogWarning(ex, "TestConnection failed");
+            return Json(new { ok = false, error = "Could not connect. Check the host, port, database name and credentials." }, JsonOpts);
         }
     }
 
@@ -133,9 +136,10 @@ public sealed class ChatController : Controller
         }
         catch (Exception ex)
         {
-            // Surface any unexpected failure to the UI instead of crashing.
+            // Surface a generic failure to the UI instead of crashing — the full
+            // exception (which may hold connection/driver internals) is only logged.
             _log.LogError(ex, "Ask stream failed");
-            var msg = $"Something went wrong: {ex.Message}. Please check the log file (logs/agent-*.log) for details.";
+            var msg = "Something went wrong while answering. Please check the log file (logs/agent-*.log) for details.";
             var payload = JsonSerializer.Serialize(
                 new StreamChunk { Type = "error", Content = msg }, JsonOpts);
             try { await Response.WriteAsync($"data: {payload}\n\n"); } catch { /* connection gone */ }
@@ -151,7 +155,7 @@ public sealed class ChatController : Controller
 
         // Header row.
         for (var c = 0; c < dto.Columns.Count; c++)
-            ws.Cell(1, c + 1).Value = dto.Columns[c];
+            WriteCell(ws.Cell(1, c + 1), dto.Columns[c]);
         ws.Row(1).Style.Font.Bold = true;
 
         // Data rows.
@@ -159,7 +163,7 @@ public sealed class ChatController : Controller
         {
             var row = dto.Rows[r];
             for (var c = 0; c < row.Count; c++)
-                ws.Cell(r + 2, c + 1).Value = XLCellValue.FromObject(row[c]);
+                WriteCell(ws.Cell(r + 2, c + 1), row[c]);
         }
 
         ws.Columns().AdjustToContents();
@@ -170,4 +174,49 @@ public sealed class ChatController : Controller
         return File(stream.ToArray(),
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
     }
+
+    // Guard against spreadsheet formula injection (CWE-1236). A string value that
+    // starts with = + - @ (or a leading tab/CR/LF) is executed by Excel/Sheets as
+    // a formula when the file is opened; a hostile value like =HYPERLINK(...) or
+    // =cmd|'...' could run. For those we force the cell to TEXT and mark it with a
+    // quote-prefix so Excel keeps it literal (and the marker persists in the file).
+    // Non-string values (numbers, dates, bools, null) can't be formulas -> as-is.
+    internal static void WriteCell(IXLCell cell, object? value)
+    {
+        // Rows arrive as JsonElement (the DTO is List<List<object?>> and
+        // System.Text.Json boxes each value), so unwrap those to a real CLR value
+        // first — otherwise a hostile string would never be seen as a string here.
+        var v = Unwrap(value);
+
+        if (v is string s && s.Length > 0 &&
+            s[0] is '=' or '+' or '-' or '@' or '\t' or '\r' or '\n')
+        {
+            // Assigning a value that starts with an apostrophe makes ClosedXML store
+            // the cell with Excel's quote-prefix flag (text marker) and drop the
+            // apostrophe from the visible value — so Excel shows the original text
+            // and never runs it as a formula.
+            cell.Value = "'" + s;
+            return;
+        }
+        cell.Value = XLCellValue.FromObject(v);
+    }
+
+    // Convert a System.Text.Json JsonElement (how object? values arrive) into a
+    // plain CLR value ClosedXML understands, so strings are seen as strings (and
+    // can be checked for formula-injection). Non-JsonElement values pass through.
+    internal static object? Unwrap(object? value) => value switch
+    {
+        JsonElement je => je.ValueKind switch
+        {
+            JsonValueKind.String => je.GetString(),
+            // Box each branch separately so an integer stays a long (a shared
+            // ternary would promote both to double).
+            JsonValueKind.Number => je.TryGetInt64(out var l) ? l : (object)je.GetDouble(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => je.ToString(),
+        },
+        _ => value,
+    };
 }

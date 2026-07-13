@@ -96,7 +96,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
         catch (Exception ex)
         {
             _log.LogWarning(ex, "Schema load failed");
-            return new SchemaLoadResult { Success = false, Error = ex.Message };
+            return new SchemaLoadResult { Success = false, Error = Sanitize(ex) };
         }
     }
 
@@ -129,7 +129,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
             {
                 var chatPrompt = NonDataPrompt(analysis.Intent, request, schema);
                 var reply = string.Empty;
-                await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
+                await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, PromptBuilder.SystemPrompt, ct))
                     reply += tok;
                 return new AskResult
                 {
@@ -148,7 +148,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
                 var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema,
                     EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
                 var msg = string.Empty;
-                await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
+                await foreach (var tok in ai.StreamExplanationAsync(reply, model, PromptBuilder.SystemPrompt, ct))
                     msg += tok;
                 return new AskResult
                 {
@@ -162,12 +162,12 @@ public sealed partial class QueryAgentService : IQueryAgentService
                 return Fail(request.Question, model, $"Rejected unsafe SQL: {validation.Reason}", rawSql);
 
             var result = await _executor.ExecuteReadOnlyAsync(
-                conn, dialectId, validation.SafeSql!, _agent.QueryTimeoutSeconds, ct);
+                conn, dialectId, validation.SafeSql!, _agent.QueryTimeoutSeconds, _agent.MaxRows, ct);
 
             var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result,
                 request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
             var explanation = string.Empty;
-            await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
+            await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, PromptBuilder.SystemPrompt, ct))
                 explanation += tok;
 
             return new AskResult
@@ -183,7 +183,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
         catch (Exception ex)
         {
             _log.LogError(ex, "Ask failed");
-            return Fail(request.Question, model, ex.Message, null);
+            return Fail(request.Question, model, Sanitize(ex), null);
         }
     }
 
@@ -218,7 +218,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
         {
             yield return Status("Thinking...");
             var chatPrompt = NonDataPrompt(analysis.Intent, request, schema!);
-            await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, ct))
+            await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, PromptBuilder.SystemPrompt, ct))
                 yield return new StreamChunk { Type = "token", Content = tok };
             // If this was a language instruction, tell the client which language
             // (from the LLM's analysis) so it can make the preference sticky for the
@@ -259,7 +259,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
                 yield return Status("Thinking...");
                 var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema!,
                     EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
-                await foreach (var tok in ai.StreamExplanationAsync(reply, model, ct))
+                await foreach (var tok in ai.StreamExplanationAsync(reply, model, PromptBuilder.SystemPrompt, ct))
                     yield return new StreamChunk { Type = "token", Content = tok };
                 yield return new StreamChunk { Type = "done", Content = model };
                 yield break;
@@ -274,7 +274,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
             yield return Status("Running query (read-only)...");
             QueryResult? attemptResult = null;
             var execError = await TryStepAsync(async () =>
-                attemptResult = await _executor.ExecuteReadOnlyAsync(conn, dialectId, safeSql, _agent.QueryTimeoutSeconds, ct));
+                attemptResult = await _executor.ExecuteReadOnlyAsync(conn, dialectId, safeSql, _agent.QueryTimeoutSeconds, _agent.MaxRows, ct));
 
             if (execError is null) { result = attemptResult; break; }
 
@@ -303,25 +303,56 @@ public sealed partial class QueryAgentService : IQueryAgentService
         yield return Status("Explaining result...");
         var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, safeSql!, result!,
             request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
-        await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, ct))
+        await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, PromptBuilder.SystemPrompt, ct))
             yield return new StreamChunk { Type = "token", Content = tok };
 
         yield return new StreamChunk { Type = "done", Content = model };
     }
 
-    // Runs an action and returns the error message (or null) — lets the
-    // iterator yield error chunks outside any catch clause.
-    private static string? TryStep(Action action)
+    // Runs an action and returns a SANITIZED error message (or null) — lets the
+    // iterator yield error chunks outside any catch clause. The full exception is
+    // logged; only a cleaned message reaches the caller (and thus the UI).
+    private string? TryStep(Action action)
     {
         try { action(); return null; }
-        catch (Exception ex) { return ex.Message; }
+        catch (Exception ex) { _log.LogWarning(ex, "Step failed"); return Sanitize(ex); }
     }
 
-    private static async Task<string?> TryStepAsync(Func<Task> action)
+    private async Task<string?> TryStepAsync(Func<Task> action)
     {
         try { await action(); return null; }
-        catch (Exception ex) { return ex.Message; }
+        catch (Exception ex) { _log.LogWarning(ex, "Step failed"); return Sanitize(ex); }
     }
+
+    // Keep the useful part of a DB/model error (e.g. "column \"salary\" does not
+    // exist") but strip anything that leaks infrastructure: connection strings,
+    // host:port, file paths, and multi-line stack traces. The full detail is in the
+    // log; the UI gets a single clean line.
+    private static string Sanitize(Exception ex)
+    {
+        var msg = ex.Message;
+        // First line only — drops stack-trace-like continuations.
+        var nl = msg.IndexOfAny(['\r', '\n']);
+        if (nl >= 0) msg = msg[..nl];
+        // Redact connection-string fragments and host:port / file paths.
+        msg = ConnStringFragmentRegex().Replace(msg, "[redacted]");
+        msg = HostPortRegex().Replace(msg, "[host]");
+        msg = WindowsPathRegex().Replace(msg, "[path]");
+        msg = msg.Trim();
+        return msg.Length == 0 ? "The operation failed. Please check the log file for details." : msg;
+    }
+
+    // "Password=...", "User ID=...", "Host=...", "Server=..." style key=value pairs.
+    [GeneratedRegex(@"\b(password|pwd|user id|uid|username|user|host|server|data source|database|initial catalog|port)\s*=\s*[^;]*", RegexOptions.IgnoreCase)]
+    private static partial Regex ConnStringFragmentRegex();
+
+    // Bare host:port like localhost:5433 or 10.0.0.1:1433.
+    [GeneratedRegex(@"\b[\w.-]+:\d{2,5}\b")]
+    private static partial Regex HostPortRegex();
+
+    // Windows file paths that can appear in driver/exception text.
+    [GeneratedRegex(@"[A-Za-z]:\\[^\s""]+")]
+    private static partial Regex WindowsPathRegex();
 
     /// <summary>
     /// Analyse the message into its primary intent PLUS any requested reply
@@ -352,7 +383,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         try
         {
-            return await ai.GenerateSqlAsync(prompt, model, linked.Token);
+            return await ai.GenerateSqlAsync(prompt, model, PromptBuilder.SystemPrompt, linked.Token);
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
         {
@@ -364,7 +395,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
     // Parse the two-line "INTENT: x / LANGUAGE: y" analysis. Robust to extra text:
     // intent is matched anywhere (last-line wins); LANGUAGE is read from its line as
     // a free language name ("none" -> null). Missing/garbled -> DataQuery, no language.
-    private static MessageAnalysis ParseAnalysis(string? raw)
+    internal static MessageAnalysis ParseAnalysis(string? raw)
     {
         var intent = ParseIntent(raw);
         string? language = null;
@@ -400,7 +431,7 @@ public sealed partial class QueryAgentService : IQueryAgentService
     // contains a known label, so stray mentions of a label earlier in the text
     // (e.g. a model restating the options) don't win over the final verdict.
     // Default to DataQuery so an unclear classification still answers the data.
-    private static QueryIntent ParseIntent(string? raw)
+    internal static QueryIntent ParseIntent(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return QueryIntent.DataQuery;
         var upper = raw.ToUpperInvariant();

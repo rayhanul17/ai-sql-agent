@@ -5,4 +5,7 @@
     <Project Path="src/SqlAgent.Infrastructure/SqlAgent.Infrastructure.csproj" />
     <Project Path="src/SqlAgent.Web/SqlAgent.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SqlAgent.Tests/SqlAgent.Tests.csproj" />
+  </Folder>
 </Solution>

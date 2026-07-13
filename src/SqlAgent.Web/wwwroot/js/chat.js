@@ -118,8 +118,8 @@ function populateModels(provider) {
     }
 
     els.providerHint.textContent = provider === 1
-        ? 'Cloud (fast). Requires a Groq API key in appsettings.Development.json.'
-        : 'Local Ollama. First use of a model loads it into RAM.';
+        ? '⚠️ Cloud: your schema, generated SQL, and result previews are sent to Groq to answer. Requires a Groq API key. Use Ollama to keep everything local.'
+        : '🔒 Local Ollama — nothing leaves your machine. First use of a model loads it into RAM.';
 }
 
 // Provider dropdown -> repopulate models for that provider.

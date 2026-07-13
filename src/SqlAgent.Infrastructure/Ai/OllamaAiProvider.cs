@@ -33,10 +33,9 @@ public sealed class OllamaAiProvider : IAiProvider
         return ((IChatClient)client).AsChatCompletionService();
     }
 
-    public async Task<string> GenerateSqlAsync(string prompt, string model, CancellationToken ct = default)
+    public async Task<string> GenerateSqlAsync(string prompt, string model, string? systemMessage = null, CancellationToken ct = default)
     {
-        var history = new ChatHistory();
-        history.AddUserMessage(prompt);
+        var history = BuildHistory(prompt, systemMessage);
         var response = await Chat(model).GetChatMessageContentAsync(history, cancellationToken: ct);
         // Reasoning models (e.g. qwen3) prepend a <think>...</think> block; strip it
         // so the caller gets only the SQL / intent label, not the chain-of-thought.
@@ -44,20 +43,30 @@ public sealed class OllamaAiProvider : IAiProvider
     }
 
     public IAsyncEnumerable<string> StreamExplanationAsync(
-        string prompt, string model, CancellationToken ct = default)
+        string prompt, string model, string? systemMessage = null, CancellationToken ct = default)
     {
-        return ThinkFilter.StripAsync(Raw(prompt, model, ct), ct);
+        return ThinkFilter.StripAsync(Raw(prompt, model, systemMessage, ct), ct);
     }
 
     private async IAsyncEnumerable<string> Raw(
-        string prompt, string model, [EnumeratorCancellation] CancellationToken ct)
+        string prompt, string model, string? systemMessage, [EnumeratorCancellation] CancellationToken ct)
     {
-        var history = new ChatHistory();
-        history.AddUserMessage(prompt);
+        var history = BuildHistory(prompt, systemMessage);
         await foreach (var chunk in Chat(model).GetStreamingChatMessageContentsAsync(history, cancellationToken: ct))
         {
             if (!string.IsNullOrEmpty(chunk.Content))
                 yield return chunk.Content;
         }
+    }
+
+    // A system message (when given) carries the stable agent rules as their own
+    // role; the task prompt stays the user message.
+    private static ChatHistory BuildHistory(string prompt, string? systemMessage)
+    {
+        var history = new ChatHistory();
+        if (!string.IsNullOrWhiteSpace(systemMessage))
+            history.AddSystemMessage(systemMessage);
+        history.AddUserMessage(prompt);
+        return history;
     }
 }
