@@ -579,7 +579,16 @@ async function ask(question) {
             for (const part of parts) {
                 const line = part.trim();
                 if (!line.startsWith('data:')) continue;
-                const chunk = JSON.parse(line.slice(5).trim());
+
+                // Parse each SSE event defensively: a single malformed event must
+                // not throw and abort the whole stream — skip it and keep reading.
+                let chunk;
+                try {
+                    chunk = JSON.parse(line.slice(5).trim());
+                } catch {
+                    console.warn('Skipped a malformed SSE event');
+                    continue;
+                }
 
                 if (chunk.type === 'status') {
                     ui.status.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ${escapeHtml(chunk.content)}`;

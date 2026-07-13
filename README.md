@@ -140,9 +140,17 @@ machine). It is intentionally simple; a few things you should know:
   sent to Groq's cloud API to produce the answer. Use **Ollama** to keep
   everything **fully local** — nothing leaves your machine. The provider hint in
   the UI states this.
+- **The committed connection string is demo-only.** The default
+  `Host=localhost;…;Username=agent_readonly;Password=readonly_pass` in
+  `appsettings.json` targets the **seeded Docker Postgres demo DB** and its
+  **read-only** role — it is a throwaway local credential, not a real secret.
+  For any real database, put credentials in a **`.env` file, environment
+  variables, or a gitignored/dockerignored local config** (e.g.
+  `appsettings.Development.json`, which is dockerignored) — never commit real
+  credentials.
 - **No authentication or CSRF protection.** The POST endpoints (Ask, TestConnection,
   LoadSchema, Warmup, Export) are open. That's fine on `localhost`, but **do not
-  expose this to a network or the internet** without adding auth and antiforgery.
+  expose this to a network or the internet** as-is.
 - **Connection strings are stored in the browser.** Custom connection strings you
   Save (including any password) are kept in `localStorage` in plaintext for
   convenience, and the password is masked in logs but not encrypted at rest in the
@@ -153,6 +161,14 @@ machine). It is intentionally simple; a few things you should know:
   a read-only DB user is the final backstop. Excel exports are sanitised against
   formula injection. Errors shown in the UI are trimmed of connection/driver detail
   (full detail goes to the log file).
+
+**Before exposing this beyond `localhost`, add at least:** authentication;
+CSRF/antiforgery on the POST endpoints; TLS/HTTPS; host/CORS restrictions; rate
+limiting and request-size limits (e.g. cap the `/Chat/Export` payload — it builds
+an XLSX from client-supplied rows in memory); and stricter, parser-based SQL
+validation instead of the demo's SELECT-only + keyword blocklist. These are
+intentionally omitted here to keep the demo simple and are called out as the
+work a production deployment would require.
 
 ---
 

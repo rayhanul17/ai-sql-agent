@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SqlAgent.Application.Options;
 using SqlAgent.Domain.Contracts;
@@ -20,12 +21,16 @@ public sealed class OllamaModelManager : IModelManager
     private readonly HttpClient _http;
     private readonly OllamaOptions _options;
     private readonly GroqOptions _groq;
+    private readonly ILogger<OllamaModelManager> _log;
 
-    public OllamaModelManager(HttpClient http, IOptions<OllamaOptions> options, IOptions<GroqOptions> groq)
+    public OllamaModelManager(
+        HttpClient http, IOptions<OllamaOptions> options, IOptions<GroqOptions> groq,
+        ILogger<OllamaModelManager> log)
     {
         _http = http;
         _options = options.Value;
         _groq = groq.Value;
+        _log = log;
         _http.BaseAddress = new Uri(_options.BaseUrl);
     }
 
@@ -76,7 +81,16 @@ public sealed class OllamaModelManager : IModelManager
         }
         catch (Exception ex)
         {
-            return new ModelWarmupResult { ModelId = model, Success = false, Error = ex.Message };
+            // Log the full detail server-side; return a generic, safe message so
+            // driver/connection internals never reach the UI.
+            _log.LogWarning(ex, "Model warm-up failed for {Model}", model);
+            return new ModelWarmupResult
+            {
+                ModelId = model,
+                Success = false,
+                Error = "Could not load or check the selected model. Make sure Ollama is running, " +
+                        "the model exists, or the cloud provider is configured."
+            };
         }
     }
 

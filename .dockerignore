@@ -1,3 +1,4 @@
+# Build output and IDE cruft
 **/bin/
 **/obj/
 .git/
@@ -7,3 +8,18 @@
 **/*.user
 docker/data/
 *.md
+
+# Secrets and local config — MUST NOT be baked into the image (Dockerfile uses
+# `COPY . .`, so anything not ignored here lands in the build layer).
+.env
+*.env
+**/.env
+**/*.env
+**/appsettings.Development.json
+**/appsettings.*.local.json
+
+# Logs (runtime output; never needed in the image)
+**/Logs/
+**/logs/
+**/*.log
+docker-logs/
