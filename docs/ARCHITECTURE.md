@@ -60,7 +60,7 @@ not whatever is currently typed in the panel.
 |---|------|-----------|-------|
 | a | Resolve connection + dialect + provider + model | — | `Resolve()`, `ISqlDialectFactory` |
 | b | Read the schema (cached) | `Reading database schema…` | `ISchemaIntrospector` + `ISchemaCache` |
-| c | **Classify the intent** | `Understanding your question…` | `PromptBuilder.BuildClassifyPrompt` → `IAiProvider` |
+| c | **Analyse the message** (intent + language) | `Understanding your question…` | `PromptBuilder.BuildAnalyzePrompt` → `IAiProvider` |
 | d | Branch on intent | — | see below |
 | e | Generate SQL *(data only)* | `Generating SQL…` | `PromptBuilder.BuildSqlPrompt` → `IAiProvider` |
 | f | Validate SQL *(data only)* | — | `ISqlSafetyValidator` |
@@ -197,7 +197,7 @@ Both call the **same** two SK methods:
 
 | Purpose | SK method | Used for |
 |---------|-----------|----------|
-| One-shot answer | `GetChatMessageContentAsync` | classify (step c), generate SQL (step e) |
+| One-shot answer | `GetChatMessageContentAsync` | analyse (step c), generate SQL (step e) |
 | Token stream | `GetStreamingChatMessageContentsAsync` | explanation + conversational replies (steps d, h) |
 
 So SK is doing exactly one job — **being the model client** — at steps c, e, h and

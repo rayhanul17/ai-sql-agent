@@ -20,9 +20,11 @@ test here depends on one.
 
 > Behaviour scales with the model: Groq (qwen3-32b / llama-3.3-70b) and Ollama
 > 7B are reliable; the small 3B handles the everyday cases but may slip on the
-> trickier meta/edge ones. Reasoning models emit a `<think>` block that is
-> stripped before the intent label / SQL is read. Language instructions also have
-> a fast deterministic pre-check so even the 3B never mistakes them for a query.
+> trickier meta/edge/instruction ones. Reasoning models emit a `<think>` block
+> that is stripped before the intent label / SQL is read. Intent and language are
+> detected entirely by the model (no keyword heuristics), so any phrasing in any
+> language is understood — at the cost of the 3B occasionally mislabelling an
+> unusual instruction.
 
 ---
 

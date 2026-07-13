@@ -7,12 +7,14 @@ namespace SqlAgent.Application.Services;
 /// <summary>
 /// The SQL safety layer (defense in depth). The LLM is NEVER trusted:
 ///   1) strip markdown/formatting the model tends to add;
-///   2) require a single statement (reject ';'-chained payloads);
+///   2) keep only the first statement (so a ';'-chained payload's later
+///      statements are discarded and never executed);
 ///   3) require it to start with SELECT (or WITH ... SELECT);
-///   4) reject any dangerous keyword anywhere (write/DDL/exec);
-///   5) inject a dialect-aware row limit if missing.
-/// The execution layer adds a READ ONLY transaction + read-only DB user
-/// as the final backstop.
+///   4) reject any dangerous write/DDL/exec keyword anywhere.
+/// No row limit is injected into the SQL — full results are returned; an optional
+/// reader-level cap (Agent:MaxRows) and a statement timeout bound runaway queries.
+/// The execution layer adds a READ ONLY transaction + read-only DB user as the
+/// final backstop.
 /// </summary>
 public sealed partial class SqlSafetyValidator : ISqlSafetyValidator
 {

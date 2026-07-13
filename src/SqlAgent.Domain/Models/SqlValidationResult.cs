@@ -2,8 +2,9 @@ namespace SqlAgent.Domain.Models;
 
 /// <summary>
 /// Outcome of the SQL safety layer. A query only executes when
-/// <see cref="IsValid"/> is true; <see cref="SafeSql"/> may differ from the
-/// LLM's raw SQL (e.g. a row LIMIT/TOP was injected).
+/// <see cref="IsValid"/> is true; <see cref="SafeSql"/> may differ from the LLM's
+/// raw SQL because it is cleaned (markdown/reasoning stripped) and truncated to
+/// the first statement.
 /// </summary>
 public sealed class SqlValidationResult
 {

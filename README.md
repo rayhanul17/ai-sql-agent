@@ -24,7 +24,7 @@ Question (plain English/Bangla)
         ↓
 ASP.NET Core MVC  ──►  Semantic Kernel  ──►  Ollama (Qwen 2.5 Coder)
         ↓                                         (generates SQL)
-SQL Safety Layer  (read-only, single SELECT, row limit)
+SQL Safety Layer  (read-only, single SELECT, keyword block)
         ↓
 PostgreSQL / MySQL / SQL Server   (READ ONLY transaction)
         ↓
@@ -90,6 +90,7 @@ in one go.
 | Area | Detail |
 |------|--------|
 | **AI orchestration** | Microsoft Semantic Kernel over Ollama's `IChatClient` |
+| **Intent-aware** | Each message is analysed into an intent + reply language (data query, SQL help, meta, instruction, off-topic) — detected by the model, so any phrasing/language works. Off-schema questions get a helpful "not in this database" reply instead of a hallucinated query. |
 | **Local LLM** | `qwen2.5-coder` — runtime-switchable model dropdown (3B / 14B) |
 | **Model loader** | Warm-up call + `load_duration` tracking → live "Loading model…" state |
 | **SQL safety** | Defense in depth (see below) |
@@ -323,6 +324,21 @@ Server=host.docker.internal;Port=3306;Database=your_db;User ID=root;Password=…
 ```
 
 Without it you'll see *"Authentication method 'caching_sha2_password' failed …"*.
+
+---
+
+## Configuration
+
+Tunable options live under the `Agent` section of `appsettings.json` (all have
+safe defaults):
+
+| Option | Default | What it does |
+|--------|---------|--------------|
+| `QueryTimeoutSeconds` | 120 | Statement timeout for an executed query. |
+| `LlmTimeoutSeconds` | 60 | Max wait for one LLM call before failing with a clear error (stops a throttled/hung provider from hanging the request). |
+| `SchemaCacheTtlMinutes` | 30 | How long a cached schema stays valid before it's re-read (0 = until manual refresh / restart). |
+| `MaxRows` | 0 | Hard cap on rows returned per query (0 = unlimited, so demos show full data). |
+| `DefaultProvider` / `DefaultDialect` / `DefaultConnectionString` | Ollama / PostgreSql / demo DB | The data source and model used when the user gives none. |
 
 ---
 
