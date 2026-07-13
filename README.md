@@ -201,7 +201,7 @@ cd ai-sql-agent
 # Run everything (PostgreSQL + Ollama + 3B model + app):
 docker compose -f docker-compose.full.yml up --build
 
-# → open http://localhost:8080
+# → open http://localhost:8081
 ```
 
 That's the whole thing on the local **Ollama 3B** model. The two options below
@@ -249,7 +249,7 @@ cp .env.example .env          # then put your key in .env: GROQ_API_KEY=gsk_...
 # 2. Build + start the whole stack (pulls the 3B model, ~2 GB):
 docker compose -f docker-compose.full.yml up --build
 
-# 3. Open http://localhost:8080
+# 3. Open http://localhost:8081
 ```
 
 First run downloads the .NET SDK image and the 3B model, so give it a few
