@@ -37,18 +37,6 @@ public sealed class AskRequest
     public string? StandingLanguage { get; init; }
 }
 
-/// <summary>The generated SQL plus its execution result and an AI explanation.</summary>
-public sealed class AskResult
-{
-    public required string Question { get; init; }
-    public string? GeneratedSql { get; init; }
-    public QueryResult? Result { get; init; }
-    public string? Explanation { get; init; }
-    public bool Success { get; init; }
-    public string? Error { get; init; }
-    public string? ModelUsed { get; init; }
-}
-
 /// <summary>Summary returned after (re)loading a data source's schema.</summary>
 public sealed class SchemaLoadResult
 {

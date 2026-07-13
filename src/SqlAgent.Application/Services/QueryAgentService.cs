@@ -116,77 +116,6 @@ public sealed partial class QueryAgentService : IQueryAgentService
         return (conn, dialect, ai, model);
     }
 
-    public async Task<AskResult> AskAsync(AskRequest request, CancellationToken ct = default)
-    {
-        var (conn, dialectId, ai, model) = Resolve(request);
-        try
-        {
-            var dialect = _dialects.Get(dialectId);
-            var schema = await GetSchemaAsync(conn, dialectId, ct);
-
-            var analysis = await AnalyzeAsync(ai, model, request, schema, ct);
-            if (analysis.Intent != QueryIntent.DataQuery)
-            {
-                var chatPrompt = NonDataPrompt(analysis.Intent, request, schema);
-                var reply = string.Empty;
-                await foreach (var tok in ai.StreamExplanationAsync(chatPrompt, model, PromptBuilder.SystemPrompt, ct))
-                    reply += tok;
-                return new AskResult
-                {
-                    Question = request.Question, Success = true,
-                    Explanation = reply, ModelUsed = model
-                };
-            }
-
-            var sqlPrompt = _prompts.BuildSqlPrompt(request.Question, schema, dialect, request.History);
-            var rawSql = await GenerateWithTimeoutAsync(ai, sqlPrompt, model, ct);
-            _log.LogInformation("Model {Model} generated SQL: {Sql}", model, rawSql);
-
-            // Subject isn't in this schema -> answer helpfully, don't hallucinate.
-            if (IsNoData(rawSql))
-            {
-                var reply = _prompts.BuildNoDataReplyPrompt(request.Question, schema,
-                    EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
-                var msg = string.Empty;
-                await foreach (var tok in ai.StreamExplanationAsync(reply, model, PromptBuilder.SystemPrompt, ct))
-                    msg += tok;
-                return new AskResult
-                {
-                    Question = request.Question, Success = true,
-                    Explanation = msg, ModelUsed = model
-                };
-            }
-
-            var validation = _validator.Validate(rawSql, dialect);
-            if (!validation.IsValid)
-                return Fail(request.Question, model, $"Rejected unsafe SQL: {validation.Reason}", rawSql);
-
-            var result = await _executor.ExecuteReadOnlyAsync(
-                conn, dialectId, validation.SafeSql!, _agent.QueryTimeoutSeconds, _agent.MaxRows, ct);
-
-            var explainPrompt = _prompts.BuildExplanationPrompt(request.Question, validation.SafeSql!, result,
-                request.History, EffectiveRequestedLanguage(request, analysis), StandingLanguage(request));
-            var explanation = string.Empty;
-            await foreach (var tok in ai.StreamExplanationAsync(explainPrompt, model, PromptBuilder.SystemPrompt, ct))
-                explanation += tok;
-
-            return new AskResult
-            {
-                Question = request.Question,
-                GeneratedSql = validation.SafeSql,
-                Result = result,
-                Explanation = explanation,
-                Success = true,
-                ModelUsed = model
-            };
-        }
-        catch (Exception ex)
-        {
-            _log.LogError(ex, "Ask failed");
-            return Fail(request.Question, model, Sanitize(ex), null);
-        }
-    }
-
     public async IAsyncEnumerable<StreamChunk> AskStreamAsync(
         AskRequest request, [EnumeratorCancellation] CancellationToken ct = default)
     {
@@ -476,13 +405,4 @@ public sealed partial class QueryAgentService : IQueryAgentService
 
     private static StreamChunk Status(string s) => new() { Type = "status", Content = s };
     private static StreamChunk Err(string s) => new() { Type = "error", Content = s };
-
-    private static AskResult Fail(string q, string model, string error, string? sql) => new()
-    {
-        Question = q,
-        Success = false,
-        Error = error,
-        GeneratedSql = sql,
-        ModelUsed = model
-    };
 }

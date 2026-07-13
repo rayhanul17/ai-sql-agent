@@ -12,9 +12,6 @@ public sealed class QueryResult
 
     public int RowCount => Rows.Count;
 
-    /// <summary>True when the result is a single numeric/aggregate value.</summary>
-    public bool IsScalar => Columns.Count == 1 && Rows.Count == 1;
-
     /// <summary>True when the reader hit the MaxRows safety cap and stopped early.</summary>
     public bool Truncated { get; set; }
 }

@@ -9,12 +9,9 @@ namespace SqlAgent.Domain.Contracts;
 /// </summary>
 public interface IQueryAgentService
 {
-    /// <summary>Full non-streamed flow: question in, SQL + result + explanation out.</summary>
-    Task<AskResult> AskAsync(AskRequest request, CancellationToken ct = default);
-
     /// <summary>
-    /// Streaming flow: emits status/sql/rows chunks, then streams the explanation
-    /// tokens, then a done chunk. Backs the SSE endpoint.
+    /// The one answering flow: emits status/sql/rows chunks, then streams the
+    /// explanation tokens, then a done chunk. Backs the SSE endpoint.
     /// </summary>
     IAsyncEnumerable<StreamChunk> AskStreamAsync(AskRequest request, CancellationToken ct = default);
 

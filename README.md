@@ -1,5 +1,8 @@
 # AI SQL Agent — Chat with your Database
 
+[![CI](https://github.com/rayhanul17/ai-sql-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/rayhanul17/ai-sql-agent/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A local, privacy-friendly AI assistant that turns natural-language questions
 into **safe, read-only SQL**, runs them against a relational database, and
 streams back a plain-language answer — with the generated SQL, an HTML result
